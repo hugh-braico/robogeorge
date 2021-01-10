@@ -1,15 +1,38 @@
 # bot.py
 import os
 import discord
+from discord.ext import commands
 from dotenv import load_dotenv
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+GUILD = os.getenv('DISCORD_GUILD')
 
-client = discord.Client()
+bot = commands.Bot(command_prefix='!')
 
-@client.event
+# print server connection info
+@bot.event
 async def on_ready():
-    print(f'{client.user} has mobilized.')
+    guild = discord.utils.get(bot.guilds, name=GUILD)
+    print(
+        f'{bot.user} is connected to the following server:\n'
+        f'{guild.name} (id: {guild.id})\n'
+    )
 
-client.run(TOKEN)
+
+# test a command 
+@bot.command(name='walk', help='Posts a gif of George walking')
+async def walk_command(ctx):
+    print(f"User {ctx.author} used the !walk command in channel {ctx.channel}")
+    await ctx.send("https://cdn.discordapp.com/emojis/671277691755823104.gif")
+
+
+# test a command 
+@bot.command(name='number', help='Test thing')
+async def number(ctx, arg: int):
+    print(f"User {ctx.author} used the !number command in channel {ctx.channel}")
+    await ctx.send(f"You sent the number {arg}.")
+
+
+if __name__ == "__main__":
+    bot.run(TOKEN)
