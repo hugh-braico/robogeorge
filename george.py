@@ -33,14 +33,14 @@ async def on_ready():
 
 
 # simple ping test
-@bot.command(name='ping')
+@bot.command(name='ping', help='Ping test')
 @commands.guild_only()
 async def ping(ctx):
     await ctx.send(f"🏓 approx. latency = {round(bot.latency, 3)}s");
 
 
 # shoot the bot
-@bot.command(name='bang', aliases=['kill'])
+@bot.command(name='kill', aliases=['bang'], help='Kills the bot (SeaJay only)')
 @commands.guild_only()
 async def bang(ctx):
     if ctx.author.id == SEAJAY: 
@@ -95,7 +95,7 @@ async def on_command_error(ctx, error):
 
 
 # opt into the YomoCoins system
-@bot.command(name='optin', aliases=['opt_in'])
+@bot.command(name='optin', aliases=['opt_in'], help='Opt into YomoCoins, get 310 starting coins')
 @commands.guild_only()
 async def optin(ctx):
     if yc.get_coins(ctx.author.id) is None:
@@ -107,7 +107,7 @@ async def optin(ctx):
 
 
 # set someone's yomocoins (admin only, obviously)
-@bot.command(name='set', aliases=['setcoins', 'set_coins'])
+@bot.command(name='set', aliases=['setcoins', 'set_coins'], help="Set a user's coins (admin only)")
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def set(ctx, user: User, coins: int):
@@ -117,7 +117,7 @@ async def set(ctx, user: User, coins: int):
 
 
 # give someone yomocoins
-@bot.command(name='give', aliases=['givecoins', 'give_coins', 'givecoin', 'give_coin'])
+@bot.command(name='give', aliases=['givecoins', 'give_coins', 'givecoin', 'give_coin'], help="Give some of your coins to another user")
 @commands.guild_only()
 async def give(ctx, recipient: User, coins: int):
     giver = ctx.author
@@ -147,7 +147,7 @@ async def give(ctx, recipient: User, coins: int):
 
 
 # award someone yomocoins (admin only)
-@bot.command(name='award', aliases=['awardcoins', 'award_coins', 'awardcoin', 'award_coin'])
+@bot.command(name='award', aliases=['awardcoins', 'award_coins', 'awardcoin', 'award_coin'], help="Award coins as a treat (admin only)")
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def award(ctx, recipient: User, coins: int):
@@ -165,7 +165,7 @@ async def award(ctx, recipient: User, coins: int):
 
 
 # save yomocoins
-@bot.command(name='save', aliases=['savecoins', 'save_coins', 'savecoin', 'save_coin'])
+@bot.command(name='save', aliases=['savecoins', 'save_coins', 'savecoin', 'save_coin'], help="Manually save the coin database (admin only)")
 @commands.guild_only()
 @commands.has_permissions(administrator=True)
 async def save(ctx):
@@ -174,7 +174,7 @@ async def save(ctx):
     
 
 # list everyone's yomocoins
-@bot.command(name='list', aliases=['listcoins', 'list_coins', 'listcoin', 'list_coin'])
+@bot.command(name='list', aliases=['listcoins', 'list_coins', 'listcoin', 'list_coin'], help="List how many coins everyone has")
 @commands.guild_only()
 async def list(ctx):
     await ctx.send('\n'.join([   
@@ -185,7 +185,7 @@ async def list(ctx):
     
 
 # print one person's yomocoins
-@bot.command(name='coins', aliases=['mycoins', 'my_coins', 'check', 'checkcoins', 'check_coins', 'getcoins', 'get_coins'])
+@bot.command(name='coins', aliases=['mycoins', 'my_coins', 'checkcoins', 'check_coins'], help="List how many coins you have, or a specific user")
 @commands.guild_only()
 async def single_coins(ctx, user: User = None):
     if user is None: 
@@ -198,7 +198,7 @@ async def single_coins(ctx, user: User = None):
     
 
 # claim daily coins 
-@bot.command(name='centrelink', aliases=['dailycoins', 'dole', 'daily', 'daily_coins', 'freecoins', 'free_coins'])
+@bot.command(name='centrelink', help="Claim a daily 25 coins")
 @commands.guild_only()
 async def centrelink(ctx):
     recipient_id = ctx.author.id
@@ -220,7 +220,7 @@ async def centrelink(ctx):
 ### Betting
 
 # start betting round
-@bot.command(name='startbets', aliases=['start', 'startbet', 'start_bet', 'startbetting',  'start_betting', 'startround',  'start_round', 'start_bets'])
+@bot.command(name='start', aliases=['startbets', 'startbet', 'start_bet', 'startbetting',  'start_betting', 'startround',  'start_round', 'start_bets'], help="Start a new betting round")
 @commands.guild_only()
 async def startbets(ctx, team1: str, team2: str):
     if betting.is_active(): 
@@ -248,23 +248,35 @@ async def startbets(ctx, team1: str, team2: str):
 
 
 # cancel betting round
-@bot.command(name='cancel', aliases=['cancelbets', 'cancelbetting', 'cancelround'])
+@bot.command(name='cancel', aliases=['cancelbets', 'cancelbetting', 'cancelround'], help="Cancel the current betting round")
 @commands.guild_only()
 async def cancel(ctx):
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!startbets team1 team2` to start one.")
-    else:
+        return
+    # Confirmation process
+    canceller = betting.get_canceller()
+    author_id = ctx.author.id
+    # Cancelling is allowed if there are no bets, or it has already been proposed and this person is not the proposer
+    if betting.is_empty() or (canceller != None and canceller != author_id):
         bets = betting.get_bets_list()
         for bet in bets:
             user_id, team, amount = bet
             yc.set_coins(user_id, yc.get_coins(user_id) + amount)
         betting.cancel()
         await ctx.send(f"✅ Round cancelled. All bet amounts have been returned.")
+    # If there has been no proposal yet, make one
+    elif betting.get_canceller() is None:
+        await ctx.send(f"⚠️ A cancel of the current round has been proposed. One other person must confirm by also typing `!cancel`.")
+        betting.set_canceller(author_id)
+    # Case where someone tries to approve their own cancel
+    elif betting.get_canceller() == author_id:
+        await ctx.send(f"<:squint:749549668954013696> You can't confirm your own cancellation proposal.")
     yc.save_coins_if_necessary("yomocoins.csv")
 
 
 # lock betting round
-@bot.command(name='lock', aliases=['lockbets', 'lock_bets', 'lockbetting', 'lock_betting'])
+@bot.command(name='lock', aliases=['lockbets', 'lock_bets', 'lockbetting', 'lock_betting'], help="Stop any further bets from being made in this round")
 @commands.guild_only()
 async def lock_bets(ctx):
     if not betting.is_active(): 
@@ -276,8 +288,22 @@ async def lock_bets(ctx):
         await ctx.send(f"✅ Betting is now locked. No more bets can be made until the round is cancelled or reported.")
 
 
+# unlock betting round
+@bot.command(name='unlock', help="Opposite of unlock (admin only)")
+@commands.has_permissions(administrator=True)
+@commands.guild_only()
+async def unlock_bets(ctx):
+    if not betting.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!startbets team1 team2` to start one.")
+    elif not betting.is_locked(): 
+        await ctx.send(f"<:squint:749549668954013696> Betting is not locked.")
+    else:
+        betting.unlock()
+        await ctx.send(f"✅ Betting has been unlocked.")
+
+
 # report betting round winning team
-@bot.command(name='winner', aliases=['reportwinner', 'reportround', 'report', 'finish', 'finishbets', 'endbets'])
+@bot.command(name='winner', aliases=['reportwinner', 'reportround', 'report', 'finish', 'finishbets', 'endbets'], help="Report the winner of a round")
 @commands.guild_only()
 async def winner(ctx, team: str):
     yc.save_coins_if_necessary("yomocoins.csv")
@@ -318,7 +344,7 @@ async def winner(ctx, team: str):
 
 
 # make a new bet 
-@bot.command(name='bet', aliases=['makebet', 'betcoins', 'bet_coins'])
+@bot.command(name='bet', aliases=['makebet', 'betcoins', 'bet_coins'], help="Place a bet")
 @commands.guild_only()
 async def bet(ctx, team: str, amount: int):
     if not betting.is_active(): 
@@ -364,7 +390,7 @@ async def bet(ctx, team: str, amount: int):
 
 
 # bet all of your coins at once
-@bot.command(name='betall')
+@bot.command(name='betall', help="Same as !bet but bets all of your coins")
 @commands.guild_only()
 async def betall(ctx, team: str):
     user_id = ctx.author.id
@@ -381,7 +407,7 @@ async def betall(ctx, team: str):
 
 
 # list current bets
-@bot.command(name='listbets', aliases=['bets', 'list_bets', 'allbets', 'all_bets', 'betlist', 'bet_list', 'bets_list', 'betslist'])
+@bot.command(name='bets', aliases=['listbets', 'list_bets', 'allbets', 'all_bets', 'betlist', 'bet_list', 'bets_list', 'betslist'], help="List all current bets")
 @commands.guild_only()
 async def listbets(ctx):
     if not betting.is_active(): 
@@ -395,9 +421,9 @@ async def listbets(ctx):
 
         team1_pot = sum([amount for (u_id, team, amount) in bets_list if team == team1])
         team2_pot = sum([amount for (u_id, team, amount) in bets_list if team == team2])
-        total_pot = team1_pot + team2_pot
+        total_pot = int((team1_pot + team2_pot)*1.1)
 
-        await ctx.send(f"The current round is between **{team1}** (1) and **{team2}** (2).\n" + 
+        await ctx.send(f"The current round is between **{team1}** (1) and **{team2}** (2).\nTotal pot size: **{total_pot} YomoCoins**\n" + 
             '\n'.join([   
                 f"""💰 **{bot.get_user(int(user_id)).name}** bet {amount} YomoCoins on {team} ({float(100.0 * amount / team1_pot):.1f}%)."""
                 if team == team1 

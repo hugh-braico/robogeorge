@@ -13,6 +13,7 @@ class Betting:
         self.team2 = None
         # dict of user ids to bet amounts
         self.bets = {}
+        self.canceller_id = None
 
 
     # check if betting is active
@@ -25,9 +26,24 @@ class Betting:
         return self.locked
 
 
-    # lock betting
+    # unlock betting
     def lock(self): 
         self.locked = True
+
+
+    # lock betting
+    def unlock(self): 
+        self.locked = False
+
+
+    # get status of canceller proposal (None if nobody proposing and an id otherwise) 
+    def get_canceller(self):
+        return self.canceller_id
+
+
+    # set canceller's id
+    def set_canceller(self, user_id: int):
+        self.canceller_id = user_id
 
 
     # check if there are any bets yet
@@ -45,6 +61,7 @@ class Betting:
         else:
             self.active = True
             self.locked = False 
+            self.canceller_id = None
             self.team1 = team1
             self.team2 = team2
             self.bets = {}
@@ -73,6 +90,7 @@ class Betting:
         else:
             self.active = False
             self.locked = False
+            self.canceller_id = None
             self.team1 = None
             self.team2 = None
             self.bets = {}
@@ -133,6 +151,6 @@ class Betting:
             return [
                 (u, self.bets[u]["team"], self.bets[u]["amount"])
                 for u 
-                in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=True)
+                in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=False)
                 if self.bets[u]["team"] != winning_team
             ]
