@@ -147,7 +147,7 @@ async def give(ctx, recipient: User, coins: int):
 
 
 # award someone yomocoins (admin only)
-@bot.command(name='award', aliases=['awardcoins', 'award_coins', 'awardcoin', 'award_coin'], help="Award coins as a treat (admin only)")
+@bot.command(name='treat', aliases=['award', 'awardcoins', 'award_coins', 'awardcoin', 'award_coin'], help="Award coins as a treat (admin only)")
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def award(ctx, recipient: User, coins: int):
@@ -160,7 +160,7 @@ async def award(ctx, recipient: User, coins: int):
         if ctx.author.id == recipient.id: 
             await ctx.send("https://i.kym-cdn.com/entries/icons/facebook/000/030/329/cover1.jpg")
         yc.set_coins(recipient.id, recipient_coins + coins)
-        await ctx.send(f"🪙 Awarded {recipient.name} {coins} YomoCoins.")
+        await ctx.send(f"🪙 {recipient.name} can have {coins} YomoCoins, as a treat.")
     yc.save_coins_if_necessary("yomocoins.csv")
 
 
@@ -185,7 +185,7 @@ async def list(ctx):
     
 
 # print one person's yomocoins
-@bot.command(name='coins', aliases=['mycoins', 'my_coins', 'checkcoins', 'check_coins'], help="List how many coins you have, or a specific user")
+@bot.command(name='coins', aliases=['coin', 'mycoins', 'my_coins', 'checkcoins', 'check_coins'], help="List how many coins you have, or a specific user")
 @commands.guild_only()
 async def single_coins(ctx, user: User = None):
     if user is None: 
@@ -237,8 +237,9 @@ async def startbets(ctx, team1: str, team2: str):
         await ctx.send(f"<:squint:749549668954013696> Those team names are a bit too long.")
     else:
         betting.start(team1, team2)
+        gamblers_role = discord.utils.get(ctx.guild.roles, name='yomocoin-gamblers')
         await ctx.send(
-            f"💰 Betting has started! Who will reign supreme?\n"
+            f"💰 Betting has started! Who will reign supreme? {gamblers_role.mention}\n"
             f"To bet on **{team1}**, type `!bet \"{team1}\" <amount>` or simply `!bet 1 <amount>`.\n"
             f"To bet on **{team2}**, type `!bet \"{team2}\" <amount>` or simply `!bet 2 <amount>`.\n"
             f"To report the outcome, type `!winner \"{team1} OR {team2}\"` or simply `!winner <1 OR 2>`.\n"
@@ -276,7 +277,7 @@ async def cancel(ctx):
 
 
 # lock betting round
-@bot.command(name='lock', aliases=['lockbets', 'lock_bets', 'lockbetting', 'lock_betting'], help="Stop any further bets from being made in this round")
+@bot.command(name='lock', aliases=['close', 'closebets', 'lockbets', 'lock_bets', 'lockbetting', 'lock_betting'], help="Stop any further bets from being made in this round")
 @commands.guild_only()
 async def lock_bets(ctx):
     if not betting.is_active(): 
@@ -285,11 +286,11 @@ async def lock_bets(ctx):
         await ctx.send(f"<:squint:749549668954013696> Betting is already locked.")
     else:
         betting.lock()
-        await ctx.send(f"✅ Betting is now locked. No more bets can be made until the round is cancelled or reported.")
+        await ctx.send(f"🔒 Betting is now locked. No more bets can be made until the round is cancelled or reported.")
 
 
 # unlock betting round
-@bot.command(name='unlock', help="Opposite of unlock (admin only)")
+@bot.command(name='unlock', help="Opposite of lock (admin only)")
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def unlock_bets(ctx):
@@ -299,7 +300,7 @@ async def unlock_bets(ctx):
         await ctx.send(f"<:squint:749549668954013696> Betting is not locked.")
     else:
         betting.unlock()
-        await ctx.send(f"✅ Betting has been unlocked.")
+        await ctx.send(f"🔓 Betting has been unlocked.")
 
 
 # report betting round winning team
@@ -403,7 +404,8 @@ async def betall(ctx, team: str):
         await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
     elif amount == 0: 
         await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to bet. Maybe try `!centrelink`?")
-    await bet(ctx, team, amount)
+    else:
+        await bet(ctx, team, amount)
 
 
 # list current bets
