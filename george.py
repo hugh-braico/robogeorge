@@ -112,7 +112,7 @@ async def optin(ctx):
 @commands.guild_only()
 async def set(ctx, user: User, coins: int):
     yc.set_coins(user.id, coins)
-    await ctx.send(f"🪙 {user}'s YomoCoins set to {coins}.")
+    await ctx.send(f"🪙 {user.name}'s YomoCoins set to {coins}.")
     yc.save_coins_if_necessary("yomocoins.csv")
 
 
@@ -142,7 +142,10 @@ async def give(ctx, recipient: User, coins: int):
     else: 
         yc.set_coins(giver.id, giver_coins - coins)
         yc.set_coins(recipient.id, recipient_coins + coins)
-        await ctx.send(f"🪙 You have given {recipient.name} {coins} YomoCoins.")
+        if coins == 1:
+            await ctx.send(f"🪙 You have given {recipient.name} a single YomoCoin.")
+        else:
+            await ctx.send(f"🪙 You have given {recipient.name} {coins} YomoCoins.")
     yc.save_coins_if_necessary("yomocoins.csv")
 
 
@@ -154,13 +157,18 @@ async def award(ctx, recipient: User, coins: int):
     recipient_coins = yc.get_coins(recipient.id)
     if recipient_coins is None: 
         await ctx.send(f"<:squint:749549668954013696> {recipient.name} doesn't appear to be in the YomoCoins system yet. Use `!optin`")
-    elif coins <= 0: 
+    elif coins < 0: 
         await ctx.send(f"<:squint:749549668954013696> Invalid amount of YomoCoins.")
+    elif coins == 0: 
+        await ctx.send(f"https://www.youtube.com/watch?v=M5QGkOGZubQ")
     else: 
         if ctx.author.id == recipient.id: 
             await ctx.send("https://i.kym-cdn.com/entries/icons/facebook/000/030/329/cover1.jpg")
         yc.set_coins(recipient.id, recipient_coins + coins)
-        await ctx.send(f"🪙 {recipient.name} can have {coins} YomoCoins, as a treat.")
+        if coins == 1:
+            await ctx.send(f"🪙 {recipient.name} can have a YomoCoin, as a treat.")
+        else:
+            await ctx.send(f"🪙 {recipient.name} can have {coins} YomoCoins, as a treat.")
     yc.save_coins_if_necessary("yomocoins.csv")
 
 
@@ -321,6 +329,9 @@ async def winner(ctx, team: str):
                 winning_team = team1
             elif team == "2" or team.lower() == team2.lower():
                 winning_team = team2
+            else:
+                await ctx.send(f"<:vic:792318295709581333> That's not one of the teams.")
+                return
 
             winners_list = betting.get_winners_list(winning_team)
             losers_list = betting.get_losers_list(winning_team)
@@ -332,7 +343,7 @@ async def winner(ctx, team: str):
             # pay out winnings
             for bet in winners_list: 
                 (user_id, t_, bet_amount) = bet
-                win_amount = int((float)((bet_amount / winners_pot) * total_pot))
+                win_amount = min(10*bet_amount, int((float)((bet_amount / winners_pot) * total_pot)))
                 yc.set_coins(user_id, yc.get_coins(user_id) + win_amount)
 
             await ctx.send(

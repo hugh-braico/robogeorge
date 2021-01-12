@@ -42,7 +42,7 @@ class YomoCoins:
         now = dt.datetime.now()
         if (self.time_last_saved - now > dt.timedelta(minutes=60)):
             self.save_coins(filename)
-        self.time_last_saved = now
+            self.time_last_saved = now
 
 
     # get a user's coins, return None for non-existent entry
@@ -57,6 +57,7 @@ class YomoCoins:
     def set_coins(self, user_id: int, coins: int):
         if user_id not in self.coins_dict: 
             self.coins_dict[user_id] = {}
+            self.coins_dict[user_id]["daily"] = dt.date.today()
         self.coins_dict[user_id]["coins"] = coins
 
 
