@@ -9,7 +9,6 @@ class YomoCoins:
         self.coins_dict = {}
         self.time_last_saved = dt.datetime.now()
         self.daily_coins_day = dt.date.today()
-        self.daily_coins_dict = {}
 
 
     # load YomoCoins file 
@@ -19,17 +18,22 @@ class YomoCoins:
             for row in reader:
                 self.coins_dict[int(row["user_id"])] = {} 
                 self.coins_dict[int(row["user_id"])]["coins"] = int(row["coins"])
+                self.coins_dict[int(row["user_id"])]["daily"] = (dt.datetime.strptime(row["daily"], "%Y-%m-%d")).date()
         print(f"YomoCoins loaded from {filename}.")
 
 
     # save YomoCoins file 
     def save_coins(self, filename: str):
         with open(filename, "w", newline='') as csvfile: 
-            fieldnames = ["user_id", "coins"]
+            fieldnames = ["user_id", "coins", "daily"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for user_id in self.coins_dict:
-                writer.writerow({"user_id" : user_id, "coins" : self.coins_dict[user_id]["coins"]})
+                writer.writerow({
+                    "user_id" : user_id, 
+                    "coins" : self.coins_dict[user_id]["coins"],
+                    "daily" : self.coins_dict[user_id]["daily"].strftime("%Y-%m-%d")
+                })
         print(f"YomoCoins saved to {filename}.")
 
 
@@ -61,15 +65,13 @@ class YomoCoins:
         return sorted(self.coins_dict, key=lambda x: self.get_coins(x), reverse=True)
 
 
-    # check if a user is eligible to receive daily coins
-    def check_daily_eligibility(self, user_id: int):
-        today = dt.date.today()
-        if today != self.daily_coins_day:
-            self.daily_coins_dict = {}
-            self.daily_coins_day = today
-        if user_id not in self.daily_coins_dict: 
-            self.daily_coins_dict[user_id] = True
-            return True
-        else:
-            return False
+    # check if a user has already claimed their daily coins
+    def get_daily_claimed(self, user_id: int):
+        return dt.date.today() == self.coins_dict[user_id]["daily"]
+
+
+    # record that a user claimed their daily today
+    def set_daily_claimed(self, user_id: int):
+        self.coins_dict[user_id]["daily"] = dt.date.today()
+        
 

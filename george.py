@@ -205,12 +205,13 @@ async def centrelink(ctx):
     recipient_coins = yc.get_coins(recipient_id)
     if recipient_coins == None:
         await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
-    elif not yc.check_daily_eligibility(recipient_id):
+    elif yc.get_daily_claimed(recipient_id):
         await ctx.send(f"<:squint:749549668954013696> You have already claimed today's free daily YomoCoins.")
     else: 
         recipient_coins = yc.get_coins(recipient_id)
         global daily_amount
         yc.set_coins(recipient_id, recipient_coins + daily_amount)
+        yc.set_daily_claimed(recipient_id)
         await ctx.send(f"🪙 Claimed {daily_amount} daily YomoCoins. Come back tomorrow for more.")
     yc.save_coins_if_necessary("yomocoins.csv")
 
