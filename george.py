@@ -262,7 +262,7 @@ async def startbets(ctx, team1: str, team2: str):
 @commands.guild_only()
 async def cancel(ctx):
     if not betting.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!startbets team1 team2` to start one.")
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
         return
     # Confirmation process
     canceller = betting.get_canceller()
@@ -290,7 +290,7 @@ async def cancel(ctx):
 @commands.guild_only()
 async def lock_bets(ctx):
     if not betting.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!startbets team1 team2` to start one.")
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
     elif betting.is_locked(): 
         await ctx.send(f"<:squint:749549668954013696> Betting is already locked.")
     else:
@@ -304,7 +304,7 @@ async def lock_bets(ctx):
 @commands.guild_only()
 async def unlock_bets(ctx):
     if not betting.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!startbets team1 team2` to start one.")
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
     elif not betting.is_locked(): 
         await ctx.send(f"<:squint:749549668954013696> Betting is not locked.")
     else:
@@ -318,7 +318,7 @@ async def unlock_bets(ctx):
 async def winner(ctx, team: str):
     yc.save_coins_if_necessary("yomocoins.csv")
     if not betting.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!startbets team1 team2` to start one.")
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
     else:
         if betting.is_empty():
             await ctx.send(f"Betting is now over, but nobody placed any bets... <:soulless:681461973761654790>")
@@ -361,7 +361,7 @@ async def winner(ctx, team: str):
 @commands.guild_only()
 async def bet(ctx, team: str, amount: int):
     if not betting.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!startbets team1 team2` to start one.")
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
     elif betting.is_locked(): 
         await ctx.send(f"Betting is locked for the remainder of this round.")
     else:
@@ -409,7 +409,7 @@ async def betall(ctx, team: str):
     user_id = ctx.author.id
     amount = yc.get_coins(user_id)
     if not betting.is_active(): 
-        await ctx.send(f"There is no active betting round happening. Use `!startbets team1 team2` to start one.")
+        await ctx.send(f"There is no active betting round happening. Use `!start team1 team2` to start one.")
     elif betting.is_locked(): 
         await ctx.send(f"Betting is locked for the remainder of this round.")
     elif amount is None:
@@ -425,7 +425,7 @@ async def betall(ctx, team: str):
 @commands.guild_only()
 async def listbets(ctx):
     if not betting.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!startbets team1 team2` to start one.")
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
     elif betting.is_empty():
         await ctx.send(f"The current round is between **{betting.get_team1()}** (1) and **{betting.get_team2()}** (2).\nNobody has made a bet yet.")
     else:
