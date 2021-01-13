@@ -57,7 +57,7 @@ class YomoCoins:
     def set_coins(self, user_id: int, coins: int):
         if user_id not in self.coins_dict: 
             self.coins_dict[user_id] = {}
-            self.coins_dict[user_id]["daily"] = dt.date.today()
+            self.coins_dict[user_id]["daily"] = dt.date.today() - dt.timedelta(days=1)
         self.coins_dict[user_id]["coins"] = coins
 
 
