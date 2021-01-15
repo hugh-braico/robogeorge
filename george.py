@@ -237,8 +237,14 @@ async def single_coins(ctx, user: User = None):
     coins = yc.get_coins(user.id)
     if coins is None:
         await ctx.send(f"""<:squint:749549668954013696> Invalid user, or user is not in the YomoCoins database yet. If the latter, use `!optin`""")
+    elif coins == 0:
+        await ctx.send(f"""<:hmmge:798436267435884584> {user.name} is **totally bankrupt.**""")
+    elif coins == 1:
+        await ctx.send(f"""<:hmmge:798436267435884584> {user.name} has **1** YomoCoin.""")
+    elif coins < 10:
+        await ctx.send(f"""<:hmmge:798436267435884584> {user.name} has **{coins}** YomoCoins.""")
     else: 
-        await ctx.send(f"""🪙 {user.name} has {coins} coins.""")
+        await ctx.send(f"""🪙 {user.name} has **{coins}** YomoCoins.""")
 
     
 # print one person's betting stats
@@ -265,13 +271,12 @@ async def betting_stats(ctx, user: User = None):
             win_rate = "N/A"
 
         await ctx.send(
-            f"📈 {user.name}'s betting stats:'\n" + 
+            f"📈 **{user.name}**'s betting stats:\n" + 
             f"**Wins:** {wins}/{total_bets}\n" + 
             f"**Win rate:** {win_rate}\n" + 
             f"**Current win streak:** {streak}\n" + 
             f"**Best win streak:** {best_streak}\n"
         ) 
-
     
 
 # claim daily coins 
@@ -481,7 +486,7 @@ async def bet(ctx, team: str, amount: int):
                 else: 
                     betting.place_bet(user_id, betting_team, amount)
                     yc.set_coins(user_id, user_coins - amount)
-                    await ctx.send(f"💰 Bet placed! Good luck.")
+                    await ctx.send(f"💰 Bet placed for {amount} YomoCoins! Good luck.")
     yc.save_coins_if_necessary("yomocoins.csv")
 
 
@@ -546,7 +551,7 @@ async def listbets(ctx):
 
         # Finally, piece together the message
         await ctx.send(
-            f"The current round is between **{team1}** (1) and **{team2}** (2). " + lock_indicator + 
+            f"💰 The current round is between **{team1}** (1) and **{team2}** (2). " + lock_indicator + 
             f"\nTotal pot size: **{total_pot} YomoCoins**" + 
             team1_list_header + 
             '\n'.join([   

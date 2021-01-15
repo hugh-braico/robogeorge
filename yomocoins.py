@@ -62,6 +62,7 @@ class YomoCoins:
         if (self.time_last_saved - now > dt.timedelta(minutes=60)):
             print(self.logging_timestamp() + "Autosaving CSV file.")
             self.save_coins(filename)
+            self.backup_coins()
             self.time_last_saved = now
 
 
