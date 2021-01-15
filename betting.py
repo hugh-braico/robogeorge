@@ -83,7 +83,8 @@ class Betting:
             return self.team2
 
 
-    # cancel betting round - make sure you give everyone's money back first!
+    # cancel betting round
+    # does not give each user their money back so that has to be handled separately
     def cancel(self): 
         if not self.is_active():
             raise Exception("Tried to use cancel while betting not active")
@@ -118,39 +119,24 @@ class Betting:
             self.bets[user_id] = {"team": betting_team, "amount" : amount}
 
 
-    # ordered list of bets, descending order
-    def get_bets_list(self):
+    # ordered list of bets in descending order
+    # optional "team" parameter to only get bets for a specific team
+    def get_bets_list(self, team: str = None):
         if not self.is_active():
             raise Exception("Tried to use get_bets_list while betting not active")
         else: 
-            return [
-                (u, self.bets[u]["team"], self.bets[u]["amount"]) 
-                for u 
-                in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=True)
-            ]
-
-
-    # ordered list of winning bets, descending order
-    def get_winners_list(self, winning_team):
-        if not self.is_active():
-            raise Exception("Tried to use get_winners_list while betting not active")
-        else: 
-            return [
-                (u, self.bets[u]["team"], self.bets[u]["amount"]) 
-                for u 
-                in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=True)
-                if self.bets[u]["team"] == winning_team
-            ]
-
-
-    # ordered list of winning bets, descending order
-    def get_losers_list(self, winning_team):
-        if not self.is_active():
-            raise Exception("Tried to use get_losers_list while betting not active")
-        else: 
-            return [
-                (u, self.bets[u]["team"], self.bets[u]["amount"])
-                for u 
-                in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=False)
-                if self.bets[u]["team"] != winning_team
-            ]
+            if team:
+                # return only the bets for this team
+                return [
+                    (u, self.bets[u]["team"], self.bets[u]["amount"]) 
+                    for u 
+                    in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=True)
+                    if self.bets[u]["team"] == team
+                ]
+            else:
+                # return all bets
+                return [
+                    (u, self.bets[u]["team"], self.bets[u]["amount"]) 
+                    for u 
+                    in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=True)
+                ]
