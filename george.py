@@ -51,7 +51,7 @@ async def bang(ctx):
             await ctx.send("<:sadcat:712998237975478282> Saving YomoCoins database and shutting down...")
             yc.save_coins("yomocoins.csv")
             yc.backup_coins()
-            sys.exit(0)
+            await bot.close()
     else: 
         await ctx.send("<:squint:749549668954013696> You don't have the right permissions to do that.")
 

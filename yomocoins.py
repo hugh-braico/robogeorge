@@ -56,10 +56,10 @@ class YomoCoins:
         self.save_coins(f"yomocoin_backups/yomocoins_{timestamp}.csv")
 
 
-    # caching - save YomoCoins file if more than an hour has passed since it was last saved
+    # caching - save YomoCoins file if a certain amount of time has passed since it was last saved
     def save_coins_if_necessary(self, filename: str):
         now = dt.datetime.now()
-        if (self.time_last_saved - now > dt.timedelta(minutes=60)):
+        if (self.time_last_saved - now > dt.timedelta(minutes=30)):
             print(self.logging_timestamp() + "Autosaving CSV file.")
             self.save_coins(filename)
             self.backup_coins()
