@@ -1,6 +1,9 @@
 import csv
 import datetime as dt
 
+import logging
+log = logging.getLogger("yomo")
+
 # yomocoins.py
 # Class for storing information and statistics about each user's YomoCoins.
 # Bit of scope creep: also stores info about each user's betting stats,
@@ -16,6 +19,7 @@ class YomoCoins:
 
     # load YomoCoins file from disk 
     def load_coins(self, filename: str):
+        log.info(f"Loading data from {filename} ...")
         with open(filename, newline='') as csvfile: 
             reader = csv.DictReader(csvfile)
             for row in reader:
@@ -28,10 +32,11 @@ class YomoCoins:
                 self.coins_dict[user_id]["losses"]      = int(row["losses"])
                 self.coins_dict[user_id]["streak"]      = int(row["streak"])
                 self.coins_dict[user_id]["best_streak"] = int(row["best_streak"])
-        print(self.logging_timestamp() + f"YomoCoins loaded from {filename}.")
+
 
     # save YomoCoins file to disk
     def save_coins(self, filename: str):
+        log.info(f"Saving to CSV file: {filename} ...")
         with open(filename, "w", newline='') as csvfile: 
             fieldnames = ["user_id", "coins", "daily", "wins", "losses", "streak", "best_streak"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -46,13 +51,13 @@ class YomoCoins:
                     "streak"      : self.coins_dict[user_id]["streak"],
                     "best_streak" : self.coins_dict[user_id]["best_streak"]
                 })
-        print(self.logging_timestamp() + f"YomoCoins saved to {filename}.")
 
 
     # backup coins to a timestamped file inside the backups folder
     def backup_coins(self):
         now = dt.datetime.now()
         timestamp = now.strftime("%Y-%m-%d_%H%M")
+        log.info(f"Backing up CSV file: yomocoin_backups/yomocoins_{timestamp}.csv ...")
         self.save_coins(f"yomocoin_backups/yomocoins_{timestamp}.csv")
 
 
@@ -60,7 +65,7 @@ class YomoCoins:
     def save_coins_if_necessary(self, filename: str):
         now = dt.datetime.now()
         if (self.time_last_saved - now > dt.timedelta(minutes=30)):
-            print(self.logging_timestamp() + "Autosaving CSV file.")
+            log.info("Automatically saving CSV file...")
             self.save_coins(filename)
             self.backup_coins()
             self.time_last_saved = now
@@ -75,14 +80,16 @@ class YomoCoins:
 
 
     # set a user's coins (and add them to the database if they didn't exist before)
-    def set_coins(self, user_id: int, coins: int):
+    def set_coins(self, user_id: int, coins: int, name: str):
         if user_id not in self.coins_dict: 
             self.coins_dict[user_id] = {}
             self.coins_dict[user_id]["daily"] = dt.date.today() - dt.timedelta(days=1)
+            self.coins_dict[user_id]["coins"]       = 0
             self.coins_dict[user_id]["wins"]        = 0
             self.coins_dict[user_id]["losses"]      = 0
             self.coins_dict[user_id]["streak"]      = 0
             self.coins_dict[user_id]["best_streak"] = 0
+        log.info(f"""set_coins: {name}: {self.coins_dict[user_id]["coins"]} -> {coins}""")
         self.coins_dict[user_id]["coins"] = coins
 
 
@@ -146,8 +153,6 @@ class YomoCoins:
         return self.coins_dict[user_id]["best_streak"]
 
 
-    # string of current date/time for log purposes    
-    # Maybe this belongs in another file
-    def logging_timestamp(self):
-        now = dt.datetime.now()
-        return f"""[{now.strftime("%Y-%m-%d %H:%M:%S")}] """
+    def is_richest_yomofan(self, user_id: int): 
+        return user_id == max(self.coins_dict, key=lambda k: self.coins_dict[k]["coins"])
+
