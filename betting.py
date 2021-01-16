@@ -1,4 +1,9 @@
+import logging
+log = logging.getLogger("yomo")
 
+# betting.py
+# Fairly simple class that stores the state of a betting round
+# Actual transactions and stuff are handled in yomocoins.py
 
 class Betting:
 
