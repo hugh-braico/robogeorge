@@ -27,6 +27,7 @@ log.addHandler(fh)
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 SEAJAY = int(os.getenv('SEAJAY'))
+DITZY = int(os.getenv('DITZY'))
 
 # let the bot cache member information and such
 intents = discord.Intents.default()
@@ -262,9 +263,7 @@ async def single_coins(ctx, user: User = None):
     elif coins == 0:
         await ctx.send(f"""<:hmmge:798436267435884584> {user.name} is **totally bankrupt.**""")
     elif coins == 1:
-        await ctx.send(f"""<:hmmge:798436267435884584> {user.name} has **1** YomoCoin.""")
-    elif coins < 10:
-        await ctx.send(f"""<:hmmge:798436267435884584> {user.name} has **{coins}** YomoCoins.""")
+        await ctx.send(f"""<:hmmge:798436267435884584>🪙 {user.name} has **1** YomoCoin.""")
     else: 
         await ctx.send(f"""🪙 {user.name} has **{coins}** YomoCoins.""")
 
@@ -311,15 +310,92 @@ async def centrelink(ctx):
         await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
     elif yc.get_daily_claimed(recipient_id):
         await ctx.send(f"<:squint:749549668954013696> You have already claimed today's free daily YomoCoins.")
+    elif recipient_coins >= 2000:
+        await ctx.send(f"❌ You have failed the means test, so your Centrelink payments have been cancelled.")
     elif yc.is_richest_yomofan(recipient_id):
         await ctx.send(f"❌ You are the richest YomoFan, so your Centrelink payments have been cancelled.")
+    elif betting.bet_exists(recipient_id):
+        await ctx.send(f"❌ Can't claim Centrelink while betting (or you would be able to cheat the means test).")
     else:
         recipient_coins = yc.get_coins(recipient_id)
-        daily_amount = 25
+        # Give poor yomos more, but taper off from 50 to 25 steadily to remove any incentive to go backwards
+        if recipient_coins < 100: 
+            daily_amount = 50
+        elif recipient_coins < 124:
+            daily_amount = 149 - recipient_coins
+        else:
+            daily_amount = 25
         log.info(f"!centrelink: {ctx.author.name} claiming {daily_amount} coins") 
         yc.set_coins(recipient_id, recipient_coins + daily_amount, ctx.author.name)
         yc.set_daily_claimed(recipient_id)
         await ctx.send(f"🪙 Claimed {daily_amount} daily YomoCoins. You now have {recipient_coins + daily_amount}.")
+        yc.save_coins_if_necessary("yomocoins.csv")
+
+
+# spend 100 coins to remove rand(5,15) of someone else's (they will always hold onto their last coin though)
+@bot.command(name='slap', help="Spend 200 coins to take away ~10 of someone's coins")
+@commands.guild_only()
+async def slap(ctx, victim: User):
+    slapper = ctx.author
+    slapper_coins = yc.get_coins(slapper.id)
+    victim_coins = yc.get_coins(victim.id)
+    slap_cost = 200
+    slap_amount = random.randint(10,15)
+    crit_chance = 0.02
+
+    if slapper_coins is None:
+        await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif victim_coins is None: 
+        await ctx.send(f"<:squint:749549668954013696> **{victim.name}** doesn't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif slapper.id == victim.id: 
+        await ctx.send(f"❌ You can't slap yourself.\n<:squint:749549668954013696> ...Well, you can, but why the fuck would you do that.")
+    elif slapper_coins < slap_cost: 
+        if slapper_coins == 0:
+            await ctx.send(f"<:squint:749549668954013696> You are flat broke, you can't afford to slap anybody.")
+        elif slapper_coins == 1:
+            await ctx.send(f"<:squint:749549668954013696> You only have 1 YomoCoin, you can't afford to slap anybody.")
+        else:
+            await ctx.send(f"<:squint:749549668954013696> You only have {slapper_coins} YomoCoins, you can't afford to slap anybody.")
+    elif victim_coins <= 1: 
+        await ctx.send(f"<:squint:749549668954013696> **{victim.name}** is too poor for it to be worth slapping them.")
+    else: 
+        # funny critical hit
+        crit_roll = random.random()
+
+        # one-time funny joke: slap ditzy for a guaranteed big crit
+        # TODO take this out after slapping ditzy 
+        if slapper.id == SEAJAY and victim.id == DITZY:
+            slap_amount = 14
+            crit_roll = crit_roll / 100 
+
+        if random.random() < crit_chance: 
+            slap_amount *= 10
+            is_critical = True
+        else:
+            is_critical = False
+
+        log.info(f"!slap: {slapper.name} spending {slap_cost} to remove {slap_amount} of {victim.name}'s coins")
+        log.info(f"!slap: crit_roll = {crit_roll}, is_critical = {is_critical}")
+
+        yc.set_coins(slapper.id, slapper_coins - slap_cost, slapper.name)
+
+        await ctx.send(f"💥👏 You paid a hitman {slap_cost} YomoCoins to slap **{victim.name}**.\n")
+        if is_critical: 
+            await ctx.send("https://cdn.discordapp.com/attachments/396643053600899084/799859207620657152/critical_hit.png \n")
+
+        if victim_coins > slap_amount: 
+            yc.set_coins(victim.id, victim_coins - slap_amount, victim.name)
+            await ctx.send( 
+                f"🪙 **{slap_amount}** YomoCoins fell out of {victim.name}'s pocket and into the gutter!\n" +
+                f"🪙 {victim.name} now has {victim_coins - slap_amount} YomoCoins."
+            )
+        else:
+            yc.set_coins(victim.id, 1, victim.name)
+            await ctx.send( 
+                f"🪙 **{victim_coins - 1}** YomoCoins fell out of {victim.name}'s pocket and into the gutter!\n" +
+                f"🪙 They managed to hold onto **their last YomoCoin** as they reeled from the impact.\n" + 
+                f"<:hmmge:798436267435884584> 🪙"
+            )
         yc.save_coins_if_necessary("yomocoins.csv")
 
 
@@ -328,9 +404,9 @@ async def centrelink(ctx):
 ### Betting
 
 # start betting round
-@bot.command(name='start', aliases=['startbets', 'startbet', 'start_bet', 'startbetting',  'start_betting', 'startround',  'start_round', 'start_bets'], help="Start a new betting round")
+@bot.command(name='start', aliases=['startbets'], help="Start a new betting round")
 @commands.guild_only()
-async def startbets(ctx, team1: str, team2: str):
+async def startbets(ctx, team1: str="radiant", team2: str="dire", ping: str="ping"):
     if betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is already an active betting round between "
             f"{betting.get_team1()} and {betting.get_team2()}.\n"
@@ -346,9 +422,16 @@ async def startbets(ctx, team1: str, team2: str):
     else:
         log.info(f"!start: {ctx.author.name} started bet between {team1} and {team2}")
         betting.start(team1, team2)
-        gamblers_role = discord.utils.get(ctx.guild.roles, name='yomocoin-gamblers')
+        if ping == "ping":
+            gamblers_role = discord.utils.get(ctx.guild.roles, name='yomocoin-gamblers')
+            gamblers_ping = f"{gamblers_role.mention}"
+        elif ping == "noping": 
+            gamblers_ping = "(Pinging gamblers disabled)"
+        else:
+            await ctx.send('<:squint:749549668954013696> Invalid command arguments. Maybe try `!help <command>`.')
+
         await ctx.send(
-            f"💰 Betting has started! Who will reign supreme? {gamblers_role.mention}\n"
+            f"💰 Betting has started! Who will reign supreme? " + gamblers_ping + "\n" + 
             f"To bet on **{team1}**, type `!bet \"{team1}\" <amount>` or simply `!bet 1 <amount>`.\n"
             f"To bet on **{team2}**, type `!bet \"{team2}\" <amount>` or simply `!bet 2 <amount>`.\n"
             f"To report the outcome, type `!winner \"{team1} OR {team2}\"` or simply `!winner <1 OR 2>`.\n"
@@ -454,13 +537,23 @@ async def winner(ctx, team: str):
             losers_pot = sum([amount for (u_id, team, amount) in losers_list])
             total_pot = int((winners_pot + losers_pot)*1.1)
 
+            log.info(f"!winner: winners_pot {winners_pot}, losers_pot {losers_pot}, total_pot {total_pot}")
+
             # pay out winnings and record wins for stats purposes
             for bet in winners_list: 
                 (user_id, t_, bet_amount) = bet
                 user_name = bot.get_user(int(user_id)).name
                 yc.record_win(user_id)
-                win_amount = min(10*bet_amount, int((float)((bet_amount / winners_pot) * total_pot)))
-                log.info(f"!winner: paying out {win_amount} winnings to {user_name}")
+
+                # enforce maximum payout of 10x
+                win_float = float(bet_amount * total_pot) / float(winners_pot)
+                win_amount = min(10*bet_amount, int(win_float))
+
+                # guarantee a profit of at least 1 coin as long as you bet at least 10
+                if bet_amount >= 10: 
+                    win_amount = max(bet_amount + 1, win_amount)
+
+                log.info(f"!winner: paying out {win_float:.3f} rounded to {win_amount} winnings to {user_name}")
                 yc.set_coins(user_id, yc.get_coins(user_id) + win_amount, user_name)
 
             # record losses for stats purposes 

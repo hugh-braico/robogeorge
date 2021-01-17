@@ -105,7 +105,7 @@ class Betting:
     # check if a user has already placed a bet in the current round
     def bet_exists(self, user_id: int): 
         if not self.is_active():
-            raise Exception("Tried to use bet_exists while betting not active")
+            return False
         else: 
             return user_id in self.bets
 
