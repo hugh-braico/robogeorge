@@ -110,18 +110,28 @@ class Betting:
             return user_id in self.bets
 
 
+    # get a user's existing bet
+    def get_bet(self, user_id: int): 
+        if not self.is_active() or user_id not in self.bets:
+            return None
+        else:
+            return self.bets[user_id]
+
+
     # place a new bet
     def place_bet(self, user_id: int, team: int, amount: int): 
         if not self.is_active():
             raise Exception("Tried to use place_bet while betting not active")
-        elif self.bet_exists(user_id):
-            raise Exception("Tried to overwrite an existing bet")
         else: 
             if team == 1:
                 betting_team = self.team1
             elif team == 2:
                 betting_team = self.team2
-            self.bets[user_id] = {"team": betting_team, "amount" : amount}
+            self.bets[user_id] = {
+                "team"     : betting_team, 
+                "amount"   : amount,
+                "team_num" : team
+            }
 
 
     # ordered list of bets in descending order

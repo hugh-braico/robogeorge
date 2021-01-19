@@ -127,7 +127,7 @@ async def optin(ctx):
 
 
 # set someone's yomocoins
-@bot.command(name='set', aliases=['setcoins', 'set_coins'], help="Set a user's coins (admin only)")
+@bot.command(name='set', help="Set a user's coins (admin only)")
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def set(ctx, user: User, coins: int):
@@ -138,7 +138,7 @@ async def set(ctx, user: User, coins: int):
 
 
 # give someone yomocoins
-@bot.command(name='give', aliases=['givecoins', 'give_coins', 'givecoin', 'give_coin'], help="Give some of your coins to another user")
+@bot.command(name='give', help="Give some of your coins to another user")
 @commands.guild_only()
 async def give(ctx, recipient: User, coins: int):
     giver = ctx.author
@@ -172,31 +172,34 @@ async def give(ctx, recipient: User, coins: int):
 
 
 # award someone yomocoins (admin only)
-@bot.command(name='treat', aliases=['award', 'awardcoins', 'award_coins', 'awardcoin', 'award_coin'], help="Award coins as a treat (admin only)")
+@bot.command(name='treat', aliases=['award'], help="Award coins as a treat (admin only)")
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def award(ctx, recipient: User, coins: int):
     recipient_coins = yc.get_coins(recipient.id)
     if recipient_coins is None: 
         await ctx.send(f"<:squint:749549668954013696> {recipient.name} doesn't appear to be in the YomoCoins system yet. Use `!optin`")
-    elif coins < 0: 
-        await ctx.send(f"<:squint:749549668954013696> Invalid amount of YomoCoins.")
     elif coins == 0: 
         await ctx.send(f"https://www.youtube.com/watch?v=M5QGkOGZubQ")
     else: 
         log.info(f"!treat: admin {ctx.author.name} awarding {recipient.name} {coins} coins")
-        if ctx.author.id == recipient.id: 
-            await ctx.send("https://i.kym-cdn.com/entries/icons/facebook/000/030/329/cover1.jpg")
+        if ctx.author.id == recipient.id:
+            if coins > 0: 
+                await ctx.send("https://i.kym-cdn.com/entries/icons/facebook/000/030/329/cover1.jpg")
+            else: 
+                await ctx.send("https://cdn.discordapp.com/attachments/396643053600899084/801071689337274388/trust_nobody.png")
         yc.set_coins(recipient.id, recipient_coins + coins, recipient.name)
         if coins == 1:
             await ctx.send(f"🪙 {recipient.name} can have a YomoCoin, as a treat. They now have {recipient_coins + coins}.")
-        else:
+        elif coins < 0:
+            await ctx.send(f"🪙 {recipient.name} had {-coins} of their YomoCoins revoked. They now have {recipient_coins + coins}.")
+        else: 
             await ctx.send(f"🪙 {recipient.name} can have {coins} YomoCoins, as a treat. They now have {recipient_coins + coins}.")
     yc.save_coins_if_necessary("yomocoins.csv")
 
 
 # save yomocoins
-@bot.command(name='save', aliases=['savecoins', 'save_coins', 'savecoin', 'save_coin'], help="Manually save the coin database (admin only)")
+@bot.command(name='save', help="Manually save the coin database (admin only)")
 @commands.guild_only()
 @commands.has_permissions(administrator=True)
 async def save(ctx):
@@ -252,7 +255,7 @@ async def list(ctx, options: str ="default"):
 
     
 # print one person's yomocoins
-@bot.command(name='coins', aliases=['coin', 'mycoins', 'my_coins', 'checkcoins', 'check_coins'], help="List how many coins you have, or a specific user")
+@bot.command(name='coins', aliases=['coin', 'balance', 'mycoins', 'my_coins', 'checkcoins', 'check_coins'], help="List how many coins you have, or a specific user")
 @commands.guild_only()
 async def single_coins(ctx, user: User = None):
     if user is None: 
@@ -301,7 +304,7 @@ async def betting_stats(ctx, user: User = None):
     
 
 # claim daily coins 
-@bot.command(name='centrelink', aliases=['cenno', "cenny"], help="Claim a daily 25 coins")
+@bot.command(name='centrelink', aliases=['cenno', "cenny", "gimme", "newstart", "jobkeeper", "jobseeker", "dole", "youthallowance"], help="Claim a daily 25 coins")
 @commands.guild_only()
 async def centrelink(ctx):
     recipient_id = ctx.author.id
@@ -441,7 +444,7 @@ async def startbets(ctx, team1: str="radiant", team2: str="dire", ping: str="pin
 
 
 # cancel betting round
-@bot.command(name='cancel', aliases=['cancelbets', 'cancelbetting', 'cancelround'], help="Cancel the current betting round")
+@bot.command(name='cancel', help="Cancel the current betting round")
 @commands.guild_only()
 async def cancel(ctx):
     if not betting.is_active(): 
@@ -477,7 +480,7 @@ async def cancel(ctx):
 
 
 # lock betting round
-@bot.command(name='lock', aliases=['close', 'closebets', 'lockbets', 'lock_bets', 'lockbetting', 'lock_betting'], help="Stop any further bets from being made in this round")
+@bot.command(name='lock', help="Stop any further bets from being made in this round")
 @commands.guild_only()
 async def lock_bets(ctx):
     if not betting.is_active(): 
@@ -506,100 +509,112 @@ async def unlock_bets(ctx):
 
 
 # report betting round winning team
-@bot.command(name='winner', aliases=['reportwinner', 'reportround', 'report', 'finish', 'finishbets', 'endbets'], help="Report the winner of a round")
+@bot.command(name='winner', help="Report the winner of a round")
 @commands.guild_only()
 async def winner(ctx, team: str):
-    yc.save_coins_if_necessary("yomocoins.csv")
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
-    else:
-        if betting.is_empty():
-            await ctx.send(f"Betting is now over, but nobody placed any bets... <:soulless:681461973761654790>")
-        else:
-            team1 = betting.get_team1()
-            team2 = betting.get_team2()
-            if team == "1" or team.lower() == team1.lower():
-                winning_team = team1
-                losing_team  = team2
-            elif team == "2" or team.lower() == team2.lower():
-                winning_team = team2
-                losing_team  = team1
-            else:
-                await ctx.send(f"<:vic:792318295709581333> That's not one of the teams.")
-                return
-
-            log.info(f"!winner: user {ctx.author.name} reported the winner as {winning_team}")
-
-            winners_list = betting.get_bets_list(winning_team)
-            losers_list  = betting.get_bets_list(losing_team)
-
-            winners_pot = sum([amount for (u_id, team, amount) in winners_list])
-            losers_pot = sum([amount for (u_id, team, amount) in losers_list])
-            total_pot = int((winners_pot + losers_pot)*1.1)
-
-            log.info(f"!winner: winners_pot {winners_pot}, losers_pot {losers_pot}, total_pot {total_pot}")
-
-            # pay out winnings and record wins for stats purposes
-            for bet in winners_list: 
-                (user_id, t_, bet_amount) = bet
-                user_name = bot.get_user(int(user_id)).name
-                yc.record_win(user_id)
-
-                # enforce maximum payout of 10x
-                win_float = float(bet_amount * total_pot) / float(winners_pot)
-                win_amount = min(10*bet_amount, int(win_float))
-
-                # guarantee a profit of at least 1 coin as long as you bet at least 10
-                if bet_amount >= 10: 
-                    win_amount = max(bet_amount + 1, win_amount)
-
-                log.info(f"!winner: paying out {win_float:.3f} rounded to {win_amount} winnings to {user_name}")
-                yc.set_coins(user_id, yc.get_coins(user_id) + win_amount, user_name)
-
-            # record losses for stats purposes 
-            # no need to take money away - they already lost their money when they made their bet
-            for bet in losers_list:
-                (user_id, t_, bet_amount) = bet
-                user_name = bot.get_user(int(user_id)).name
-                log.info(f"!winner: recording loss for {user_name}")
-                yc.record_loss(user_id)
-
-            await ctx.send(
-                f"💰💰💰 Betting is over! **{winning_team}** wins! 💰💰💰\n" + 
-                "\n".join([f"<:sorisring:770642052782358530> **{bot.get_user(int(user_id)).name}** won {min(10*amount, int((float)((amount / winners_pot) * total_pot)))} YomoCoins!" for (user_id, t_, amount) in winners_list]) + 
-                "\n" + 
-                "\n".join([f"<:soulless:681461973761654790> **{bot.get_user(int(user_id)).name}** lost {amount} YomoCoins..." for (user_id, t_, amount) in losers_list])
-            )
+    elif betting.is_empty():
+        await ctx.send(f"Betting is now over, but nobody placed any bets... <:soulless:681461973761654790>")
         betting.cancel()
+    else:
+        team1 = betting.get_team1()
+        team2 = betting.get_team2()
+        if team == "1" or team.lower() == team1.lower():
+            winning_team = team1
+            losing_team  = team2
+        elif team == "2" or team.lower() == team2.lower():
+            winning_team = team2
+            losing_team  = team1
+        else:
+            await ctx.send(f"<:vic:792318295709581333> That's not one of the teams.")
+            return
+
+        winners_list = betting.get_bets_list(winning_team)
+        losers_list  = betting.get_bets_list(losing_team)
+
+        # cancel as early as possible to make race conditions less likely (still possible, ofc)
+        betting.cancel()
+
+        winners_pot = sum([amount for (u_id, team, amount) in winners_list])
+        losers_pot = sum([amount for (u_id, team, amount) in losers_list])
+        total_pot = int((winners_pot + losers_pot)*1.1)
+
+        log.info(f"!winner: user {ctx.author.name} reported the winner as {winning_team}")
+        log.info(f"!winner: winners_pot {winners_pot}, losers_pot {losers_pot}, total_pot {total_pot}")
+
+        yc.backup_coins()
+
+        # pay out winnings and record wins for stats purposes
+        for bet in winners_list: 
+            (user_id, t_, bet_amount) = bet
+            user_name = bot.get_user(int(user_id)).name
+            yc.record_win(user_id)
+
+            # enforce maximum payout of 10x
+            win_float = float(bet_amount * total_pot) / float(winners_pot)
+            win_amount = min(10*bet_amount, int(win_float))
+
+            # guarantee a profit of at least 1 coin as long as you bet at least 10
+            if bet_amount >= 10: 
+                win_amount = max(bet_amount + 1, win_amount)
+
+            log.info(f"!winner: paying out {win_float:.3f} rounded to {win_amount} winnings to {user_name}")
+            yc.set_coins(user_id, yc.get_coins(user_id) + win_amount, user_name)
+
+        # record losses for stats purposes 
+        # no need to take money away - they already lost their money when they made their bet
+        for bet in losers_list:
+            (user_id, t_, bet_amount) = bet
+            user_name = bot.get_user(int(user_id)).name
+            log.info(f"!winner: recording loss for {user_name}")
+            yc.record_loss(user_id)
+
+        await ctx.send(
+            f"💰💰💰 Betting is over! **{winning_team}** wins! 💰💰💰\n" + 
+            "\n".join([f"<:sorisring:770642052782358530> **{bot.get_user(int(user_id)).name}** won {min(10*amount, int((float)((amount / winners_pot) * total_pot)))} YomoCoins!" for (user_id, t_, amount) in winners_list]) + 
+            "\n" + 
+            "\n".join([f"<:soulless:681461973761654790> **{bot.get_user(int(user_id)).name}** lost {amount} YomoCoins..." for (user_id, t_, amount) in losers_list])
+        )
         yc.save_coins_if_necessary("yomocoins.csv")
 
 
 # make a new bet 
-@bot.command(name='bet', aliases=['makebet', 'betcoins', 'bet_coins'], help="Place a bet")
+@bot.command(name='bet', help="Place a bet")
 @commands.guild_only()
 async def bet(ctx, team: str, amount: int):
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
     elif betting.is_locked(): 
-        await ctx.send(f"Betting is locked for the remainder of this round.")
+        await ctx.send(f"🔒 Betting is locked for the remainder of this round.")
     else:
         team1 = betting.get_team1()
         team2 = betting.get_team2()
         user_id = ctx.author.id
         user_coins = yc.get_coins(user_id)
 
+        # users are allowed to up existing bets for the same team if they want
+        if betting.bet_exists(user_id):
+            existing_bet = betting.get_bet(user_id)
+            existing_team = existing_bet["team_num"]
+            existing_amount = existing_bet["amount"]
+        else:
+            existing_amount = 0
+
         # coin amounts-related error checking
         if user_coins is None:
             await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
         elif amount <= 0: 
             await ctx.send(f"<:squint:749549668954013696> Invalid amount of YomoCoins.")
-        elif user_coins < amount: 
+        # in the case a user is increasing an existing bet, 
+        # we have to temporarily consider those coins as part of a user's effective coins
+        elif (user_coins + existing_amount) < amount: 
             if user_coins == 0: 
                 await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to bet. Maybe try `!centrelink`?")
             elif user_coins == 1:
                 await ctx.send(f"<:squint:749549668954013696> You only have 1 YomoCoin to bet. Maybe try `!centrelink`?")
             else:
-                await ctx.send(f"<:squint:749549668954013696> You only have {user_coins} YomoCoins to bet.")
+                await ctx.send(f"<:squint:749549668954013696> You only have {user_coins} YomoCoins left to bet with.")
         else:
             # team name-related error checking
             if team == "1" or team.lower() == team1.lower():
@@ -607,18 +622,25 @@ async def bet(ctx, team: str, amount: int):
             elif team == "2" or team.lower() == team2.lower():
                 betting_team = 2
             else:
-                betting_team = None
                 await ctx.send(f"<:squint:749549668954013696> I don't recognise that team name.\n"
-                    "Use the full name in double quotes, or just 1 for team 1 or 2 for team 2.") 
-            if betting_team is not None: 
-                if betting.bet_exists(user_id):
-                    await ctx.send(f"<:squint:749549668954013696> You've already placed a bet. All bets are final.")
-                else: 
-                    log.info(f"!bet: user {ctx.author.name} bet {amount} on {team}")
+                    "Use the full name in double quotes, or just 1 for team 1 or 2 for team 2.")
+                return
+
+            if betting.bet_exists(user_id):
+                if betting_team != existing_team or amount < existing_amount:
+                    await ctx.send(f"❌ You can't change team or reduce your betting amount.")
+                elif amount == existing_amount:
+                    await ctx.send(f"<:squint:749549668954013696> You've already placed this exact bet.")
+                else:
+                    log.info(f"!bet: user {ctx.author.name} increased their bet from {existing_amount} to {amount} on {team}")
+                    await ctx.send(f"💰 Bet increased from {existing_amount} to {amount}.")
                     betting.place_bet(user_id, betting_team, amount)
-                    yc.set_coins(user_id, user_coins - amount, ctx.author.name)
-                    await ctx.send(f"💰 Bet placed for {amount} YomoCoins! Good luck.")
-    yc.save_coins_if_necessary("yomocoins.csv")
+                    yc.set_coins(user_id, user_coins - (amount - existing_amount), ctx.author.name)
+            else: 
+                log.info(f"!bet: user {ctx.author.name} bet {amount} on {team}")
+                betting.place_bet(user_id, betting_team, amount)
+                yc.set_coins(user_id, user_coins - amount, ctx.author.name)
+                await ctx.send(f"💰 Bet placed for {amount} YomoCoins! Good luck.")
 
 
 # bet all of your coins at once
@@ -630,13 +652,43 @@ async def betall(ctx, team: str):
     if not betting.is_active(): 
         await ctx.send(f"There is no active betting round happening. Use `!start team1 team2` to start one.")
     elif betting.is_locked(): 
-        await ctx.send(f"Betting is locked for the remainder of this round.")
+        await ctx.send(f"🔒 Betting is locked for the remainder of this round.")
     elif amount is None:
         await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
     elif amount == 0: 
         await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to bet. Maybe try `!centrelink`?")
-    else:
+    else:        
+        # users are allowed to up existing bets for the same team if they want
+        if betting.bet_exists(user_id):
+            existing_bet = betting.get_bet(user_id)
+            existing_amount = existing_bet["amount"]
+        else:
+            existing_amount = 0
         await ctx.send(f"https://cdn.discordapp.com/emojis/769258836803452948.gif")
+        await bet(ctx, team, amount + existing_amount)
+
+
+# bet all of your coins at once
+@bot.command(name='betnana', help="!bets a random amount for a random team")
+@commands.guild_only()
+async def betnana(ctx):
+    user_id = ctx.author.id
+    user_coins = yc.get_coins(user_id)
+
+    if not betting.is_active(): 
+        await ctx.send(f"There is no active betting round happening. Use `!start team1 team2` to start one.")
+    elif betting.is_locked(): 
+        await ctx.send(f"🔒 Betting is locked for the remainder of this round.")
+    elif user_coins is None:
+        await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif user_coins == 0: 
+        await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to bet. Maybe try `!centrelink`?")
+    elif betting.bet_exists(user_id):
+        await ctx.send(f"❌ You're not allowed to use `!betnana` if you've already bet.")
+    else:   
+        team = str(random.randint(1,2))
+        amount = random.randint(1, user_coins)
+        await ctx.send("<:vic:780232729173164112>")
         await bet(ctx, team, amount)
 
 
@@ -700,7 +752,7 @@ async def listbets(ctx):
 
 
 # list current bets
-@bot.command(name='rig', aliases=['rigbet'], help="Does nothing, stop reading this (admin only)")
+@bot.command(name='rig', help="Does nothing, stop reading this (admin only)")
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def rigbet(ctx):
