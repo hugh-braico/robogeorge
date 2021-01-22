@@ -5,6 +5,7 @@ import datetime as dt
 import sys
 import random
 import traceback
+import asyncio
 from discord import User
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -371,8 +372,9 @@ async def slap(ctx, victim: User):
             slap_amount = 14
             crit_roll = crit_roll / 100 
 
-        if random.random() < crit_chance: 
-            slap_amount *= 10
+        if crit_roll < crit_chance: 
+            # critical is a 12x modifier 
+            slap_amount *= 12
             is_critical = True
         else:
             is_critical = False
@@ -435,9 +437,9 @@ async def startbets(ctx, team1: str="radiant", team2: str="dire", ping: str="pin
 
         await ctx.send(
             f"💰 Betting has started! Who will reign supreme? " + gamblers_ping + "\n" + 
-            f"To bet on **{team1}**, type `!bet \"{team1}\" <amount>` or simply `!bet 1 <amount>`.\n"
-            f"To bet on **{team2}**, type `!bet \"{team2}\" <amount>` or simply `!bet 2 <amount>`.\n"
-            f"To report the outcome, type `!winner \"{team1} OR {team2}\"` or simply `!winner <1 OR 2>`.\n"
+            f"To bet on **{team1}**, type `!bet \"{team1}\" <amount>` or simply `!bet 1 <amount>`.\n" + 
+            f"To bet on **{team2}**, type `!bet \"{team2}\" <amount>` or simply `!bet 2 <amount>`.\n" + 
+            f"To report the outcome, type `!winner \"{team1} OR {team2}\"` or simply `!winner <1 OR 2>`.\n" +
             f"To cancel the round, type `!cancel`."
         )
     yc.save_coins_if_necessary("yomocoins.csv")
@@ -480,17 +482,71 @@ async def cancel(ctx):
 
 
 # lock betting round
-@bot.command(name='lock', help="Stop any further bets from being made in this round")
+@bot.command(name='lock', help="Stop any further bets from being made in this round. Can be on a timer")
 @commands.guild_only()
-async def lock_bets(ctx):
+async def lock_bets(ctx, timer: int=0):
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
     elif betting.is_locked(): 
         await ctx.send(f"<:squint:749549668954013696> Betting is already locked.")
+    elif timer > 600 or timer < 0:
+        await ctx.send(f"<:squint:749549668954013696> Invalid timer value (restricted to 0-600 seconds)")
+    elif timer > 0 and betting.get_autolock():
+        await ctx.send(f"<:squint:749549668954013696> There is already an auto lock scheduled.")
     else:
+        # autolock timing logic
+        if timer > 0:
+            betting.set_autolock(True)
+
+            log.info(f"!lock: user {ctx.author.name} scheduled auto lock in {timer} seconds")
+
+            # different display formats for time remaining
+            if timer < 60:
+                time_display = f"{timer} seconds"
+            elif timer == 60:
+                time_display = f"1 minute" 
+            elif timer < 120: 
+                time_display = f"1 minute {timer-60} seconds"
+            elif timer % 60 == 0: 
+                time_display = f"{int(timer/60)} minutes"
+            else: 
+                time_display = f"{int(timer/60)} minutes {timer % 60} seconds"
+
+            # for long timers sleep until the 30 second mark and then give a warning
+            if timer > 30: 
+                await ctx.send(f"⏱️ Auto lock will occur in **" + time_display + "**. There will be a warning at 30s remaining.")
+                await asyncio.sleep(timer-30)
+                # check for manual locks, autolock cancels, and whole-ass cancels
+                if betting.is_locked() or not betting.get_autolock():
+                    return
+                await ctx.send(f"⚠️ **Locking in 30 seconds!** ⚠️")
+                await asyncio.sleep(30)
+            else: 
+                await ctx.send(f"⚠️ **Locking in {time_display}!**")
+                await asyncio.sleep(timer)
+            # check for manual locks, autolock cancels, and whole-ass cancels
+            if betting.is_locked() or not betting.get_autolock():
+                return
+            betting.set_autolock(False)
+
         log.info(f"!lock: user {ctx.author.name} locked the bet")
         betting.lock()
         await ctx.send(f"🔒 Betting is now locked. No more bets can be made until the round is cancelled or reported.")
+
+
+# cancel auto lock 
+@bot.command(name='stopautolock', aliases=['noautolock', 'cancelautolock'], help="Cancel autolock timer")
+@commands.guild_only()
+async def stopautolock(ctx):
+    if not betting.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
+    elif betting.is_locked(): 
+        await ctx.send(f"<:squint:749549668954013696> Betting is already locked.")
+    elif not betting.get_autolock():
+        await ctx.send(f"<:squint:749549668954013696> There is no auto lock scheduled.")
+    else:
+        betting.set_autolock(False)
+        await ctx.send(f"⏱️ Auto lock has been stopped.")
 
 
 # unlock betting round
@@ -503,7 +559,7 @@ async def unlock_bets(ctx):
     elif not betting.is_locked(): 
         await ctx.send(f"<:squint:749549668954013696> Betting is not locked.")
     else:
-        log.info(f"!lock: administrator {ctx.author.name} locked the bet")
+        log.info(f"!lock: administrator {ctx.author.name} unlocked the bet")
         betting.unlock()
         await ctx.send(f"🔓 Betting has been unlocked.")
 
@@ -546,6 +602,7 @@ async def winner(ctx, team: str):
         yc.backup_coins()
 
         # pay out winnings and record wins for stats purposes
+        win_amounts = {}
         for bet in winners_list: 
             (user_id, t_, bet_amount) = bet
             user_name = bot.get_user(int(user_id)).name
@@ -560,6 +617,7 @@ async def winner(ctx, team: str):
                 win_amount = max(bet_amount + 1, win_amount)
 
             log.info(f"!winner: paying out {win_float:.3f} rounded to {win_amount} winnings to {user_name}")
+            win_amounts[user_id] = win_amount
             yc.set_coins(user_id, yc.get_coins(user_id) + win_amount, user_name)
 
         # record losses for stats purposes 
@@ -572,7 +630,7 @@ async def winner(ctx, team: str):
 
         await ctx.send(
             f"💰💰💰 Betting is over! **{winning_team}** wins! 💰💰💰\n" + 
-            "\n".join([f"<:sorisring:770642052782358530> **{bot.get_user(int(user_id)).name}** won {min(10*amount, int((float)((amount / winners_pot) * total_pot)))} YomoCoins!" for (user_id, t_, amount) in winners_list]) + 
+            "\n".join([f"<:sorisring:770642052782358530> **{bot.get_user(int(user_id)).name}** won {win_amounts[user_id]} YomoCoins!" for (user_id, t_, a_) in winners_list]) + 
             "\n" + 
             "\n".join([f"<:soulless:681461973761654790> **{bot.get_user(int(user_id)).name}** lost {amount} YomoCoins..." for (user_id, t_, amount) in losers_list])
         )
@@ -619,11 +677,13 @@ async def bet(ctx, team: str, amount: int):
             # team name-related error checking
             if team == "1" or team.lower() == team1.lower():
                 betting_team = 1
+                display_team = team1
             elif team == "2" or team.lower() == team2.lower():
                 betting_team = 2
+                display_team = team2
             else:
                 await ctx.send(f"<:squint:749549668954013696> I don't recognise that team name.\n"
-                    "Use the full name in double quotes, or just 1 for team 1 or 2 for team 2.")
+                    f"Use the full name in double quotes, or just 1 for {team1} or 2 for {team2}.")
                 return
 
             if betting.bet_exists(user_id):
@@ -640,7 +700,7 @@ async def bet(ctx, team: str, amount: int):
                 log.info(f"!bet: user {ctx.author.name} bet {amount} on {team}")
                 betting.place_bet(user_id, betting_team, amount)
                 yc.set_coins(user_id, user_coins - amount, ctx.author.name)
-                await ctx.send(f"💰 Bet placed for {amount} YomoCoins! Good luck.")
+                await ctx.send(f"💰 Bet placed on **{display_team}** for {amount} YomoCoins! Good luck.")
 
 
 # bet all of your coins at once

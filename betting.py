@@ -13,6 +13,8 @@ class Betting:
         self.active = False
         # Are users allowed to bet right now? 
         self.locked = False 
+        # Is there an auto lock scheduled? 
+        self.autolock = False 
         # The things to bet on
         self.team1 = None
         self.team2 = None
@@ -41,6 +43,16 @@ class Betting:
         self.locked = False
 
 
+    # check if a lock is scheduled
+    def get_autolock(self): 
+        return self.autolock
+
+
+    # mark if a lock is scheduled or not
+    def set_autolock(self, b: bool): 
+        self.autolock = b
+
+
     # get status of canceller proposal (None if nobody proposing and an id otherwise) 
     def get_canceller(self):
         return self.canceller_id
@@ -66,9 +78,25 @@ class Betting:
         else:
             self.active = True
             self.locked = False 
+            self.autolock = False 
             self.canceller_id = None
             self.team1 = team1
             self.team2 = team2
+            self.bets = {}
+
+
+    # cancel betting round
+    # does not give each user their money back, so that has to be handled separately
+    def cancel(self): 
+        if not self.is_active():
+            raise Exception("Tried to use cancel while betting not active")
+        else:
+            self.active = False
+            self.locked = False
+            self.autolock = False
+            self.canceller_id = None
+            self.team1 = None
+            self.team2 = None
             self.bets = {}
 
 
@@ -86,20 +114,6 @@ class Betting:
             raise Exception("Tried to use get_team2 while betting not active")
         else: 
             return self.team2
-
-
-    # cancel betting round
-    # does not give each user their money back so that has to be handled separately
-    def cancel(self): 
-        if not self.is_active():
-            raise Exception("Tried to use cancel while betting not active")
-        else:
-            self.active = False
-            self.locked = False
-            self.canceller_id = None
-            self.team1 = None
-            self.team2 = None
-            self.bets = {}
 
 
     # check if a user has already placed a bet in the current round
