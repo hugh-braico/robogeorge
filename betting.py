@@ -13,12 +13,15 @@ class Betting:
         self.active = False
         # Are users allowed to bet right now? 
         self.locked = False 
+        # Is there an auto lock scheduled? 
+        self.autolock = None
         # The things to bet on
         self.team1 = None
         self.team2 = None
         # dict of user ids to bet amounts
         self.bets = {}
         self.canceller_id = None
+        self.draft = "A draft image hasn't been linked yet, use `!draft <link>` to link one."
 
 
     # check if betting is active
@@ -39,6 +42,16 @@ class Betting:
     # lock betting
     def unlock(self): 
         self.locked = False
+
+
+    # check if a lock is scheduled
+    def get_autolock(self): 
+        return self.autolock
+
+
+    # mark if a lock is scheduled or not with a timestamp
+    def set_autolock(self, t): 
+        self.autolock = t
 
 
     # get status of canceller proposal (None if nobody proposing and an id otherwise) 
@@ -66,10 +79,28 @@ class Betting:
         else:
             self.active = True
             self.locked = False 
+            self.autolock = None 
             self.canceller_id = None
             self.team1 = team1
             self.team2 = team2
             self.bets = {}
+            self.draft = "A draft image hasn't been linked yet, use `!draft <link>` to link one."
+
+
+    # cancel betting round
+    # does not give each user their money back, so that has to be handled separately
+    def cancel(self): 
+        if not self.is_active():
+            raise Exception("Tried to use cancel while betting not active")
+        else:
+            self.active = False
+            self.locked = False
+            self.autolock = None
+            self.canceller_id = None
+            self.team1 = None
+            self.team2 = None
+            self.bets = {}
+            self.draft = "A draft image hasn't been linked yet, use `!draft <link>` to link one."
 
 
     # get team1
@@ -88,40 +119,47 @@ class Betting:
             return self.team2
 
 
-    # cancel betting round
-    # does not give each user their money back so that has to be handled separately
-    def cancel(self): 
-        if not self.is_active():
-            raise Exception("Tried to use cancel while betting not active")
-        else:
-            self.active = False
-            self.locked = False
-            self.canceller_id = None
-            self.team1 = None
-            self.team2 = None
-            self.bets = {}
-
-
     # check if a user has already placed a bet in the current round
     def bet_exists(self, user_id: int): 
         if not self.is_active():
-            raise Exception("Tried to use bet_exists while betting not active")
+            return False
         else: 
             return user_id in self.bets
 
 
+    # get a user's existing bet
+    def get_bet(self, user_id: int): 
+        if not self.is_active() or user_id not in self.bets:
+            return None
+        else:
+            return self.bets[user_id]
+
+
+    # get the link to the current draft image
+    def get_draft(self):
+        return self.draft
+
+
+    # set the link to the current draft image
+    def set_draft(self, link: str):
+        self.draft = link
+
+
     # place a new bet
-    def place_bet(self, user_id: int, team: int, amount: int): 
+    def place_bet(self, user_id: int, team: int, amount: int, display_emote: str): 
         if not self.is_active():
             raise Exception("Tried to use place_bet while betting not active")
-        elif self.bet_exists(user_id):
-            raise Exception("Tried to overwrite an existing bet")
         else: 
             if team == 1:
                 betting_team = self.team1
             elif team == 2:
                 betting_team = self.team2
-            self.bets[user_id] = {"team": betting_team, "amount" : amount}
+            self.bets[user_id] = {
+                "team"          : betting_team, 
+                "amount"        : amount,
+                "team_num"      : team,
+                "display_emote" : display_emote
+            }
 
 
     # ordered list of bets in descending order
@@ -133,7 +171,7 @@ class Betting:
             if team:
                 # return only the bets for this team
                 return [
-                    (u, self.bets[u]["team"], self.bets[u]["amount"]) 
+                    (u, self.bets[u]["team"], self.bets[u]["amount"], self.bets[u]["display_emote"]) 
                     for u 
                     in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=True)
                     if self.bets[u]["team"] == team
@@ -141,7 +179,7 @@ class Betting:
             else:
                 # return all bets
                 return [
-                    (u, self.bets[u]["team"], self.bets[u]["amount"]) 
+                    (u, self.bets[u]["team"], self.bets[u]["amount"], self.bets[u]["display_emote"]) 
                     for u 
                     in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=True)
                 ]
