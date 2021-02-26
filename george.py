@@ -44,9 +44,6 @@ betting = betting.Betting()
 # funny mmr maps between userid and a datetime (when to next generate a mmr change) 
 mmr_dict = {}
 
-# funny global variable to discourage multiple simultaneous locks 
-current_autolock_code = 0
-
 
 ################################################################################
 #
@@ -569,7 +566,8 @@ async def lock_bets(ctx, timer: int=0):
     else:
         # autolock timing logic
         if timer > 0:
-            betting.set_autolock(True)
+            now = dt.datetime.now()
+            betting.set_autolock(now)
 
             log.info(f"!lock: user {ctx.author.name} scheduled auto lock in {timer} seconds")
 
@@ -590,7 +588,7 @@ async def lock_bets(ctx, timer: int=0):
                 await ctx.send(f"⏱️ Auto lock will occur in **" + time_display + "**. There will be a warning at 30s remaining.")
                 await asyncio.sleep(timer-30)
                 # check for manual locks, autolock cancels, and whole-ass cancels
-                if betting.is_locked() or not betting.get_autolock():
+                if not betting.is_active() or betting.is_locked() or betting.get_autolock() != now:
                     return
                 await ctx.send(f"⚠️ **Locking in 30 seconds!** ⚠️")
                 await asyncio.sleep(30)
@@ -598,15 +596,21 @@ async def lock_bets(ctx, timer: int=0):
                 await ctx.send(f"⚠️ **Locking in {time_display}!**")
                 await asyncio.sleep(timer)
             # check for manual locks, autolock cancels, and whole-ass cancels
-            if betting.is_locked() or not betting.get_autolock():
+            if not betting.is_active() or betting.is_locked() or betting.get_autolock() != now:
                 return
-            betting.set_autolock(False)
+            betting.set_autolock(None)
 
-        log.info(f"!lock: user {ctx.author.name} locked the bet")
         betting.lock()
+        log.info(f"!lock: user {ctx.author.name} locked the bet")
         yc.save_coins("yomocoins.csv")
         yc.backup_coins()
         await ctx.send(f"🔒 Betting is now locked. No more bets can be made until the round is cancelled or reported.")
+
+
+@bot.command(name='autolock', help="Alias for !lock 180")
+@commands.guild_only()
+async def autolock(ctx):
+    await lock_bets(ctx, 180)
 
 
 # cancel auto lock 

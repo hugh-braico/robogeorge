@@ -14,7 +14,7 @@ class Betting:
         # Are users allowed to bet right now? 
         self.locked = False 
         # Is there an auto lock scheduled? 
-        self.autolock = False 
+        self.autolock = None
         # The things to bet on
         self.team1 = None
         self.team2 = None
@@ -49,9 +49,9 @@ class Betting:
         return self.autolock
 
 
-    # mark if a lock is scheduled or not
-    def set_autolock(self, b: bool): 
-        self.autolock = b
+    # mark if a lock is scheduled or not with a timestamp
+    def set_autolock(self, t): 
+        self.autolock = t
 
 
     # get status of canceller proposal (None if nobody proposing and an id otherwise) 
@@ -79,7 +79,7 @@ class Betting:
         else:
             self.active = True
             self.locked = False 
-            self.autolock = False 
+            self.autolock = None 
             self.canceller_id = None
             self.team1 = team1
             self.team2 = team2
@@ -95,7 +95,7 @@ class Betting:
         else:
             self.active = False
             self.locked = False
-            self.autolock = False
+            self.autolock = None
             self.canceller_id = None
             self.team1 = None
             self.team2 = None
