@@ -26,30 +26,44 @@ class YomoCoins:
                 # convert each row in the csv to an entry in a simple Python dictionary
                 user_id = int(row["user_id"])
                 self.coins_dict[user_id] = {} 
-                self.coins_dict[user_id]["coins"]       = int(row["coins"])
-                self.coins_dict[user_id]["daily"]       = (dt.datetime.strptime(row["daily"], "%Y-%m-%d")).date()
-                self.coins_dict[user_id]["wins"]        = int(row["wins"])
-                self.coins_dict[user_id]["losses"]      = int(row["losses"])
-                self.coins_dict[user_id]["streak"]      = int(row["streak"])
-                self.coins_dict[user_id]["best_streak"] = int(row["best_streak"])
+                self.coins_dict[user_id]["coins"]        = int(row["coins"])
+                self.coins_dict[user_id]["daily"]        = (dt.datetime.strptime(row["daily"], "%Y-%m-%d")).date()
+                self.coins_dict[user_id]["wins"]         = int(row["wins"])
+                self.coins_dict[user_id]["losses"]       = int(row["losses"])
+                self.coins_dict[user_id]["streak"]       = int(row["streak"])
+                self.coins_dict[user_id]["best_streak"]  = int(row["best_streak"])
+                self.coins_dict[user_id]["biggest_win"]  = int(row["biggest_win"])
+                self.coins_dict[user_id]["biggest_loss"] = int(row["biggest_loss"])
 
 
     # save YomoCoins file to disk
     def save_coins(self, filename: str):
         log.info(f"Saving to CSV file: {filename} ...")
         with open(filename, "w", newline='') as csvfile: 
-            fieldnames = ["user_id", "coins", "daily", "wins", "losses", "streak", "best_streak"]
+            fieldnames = [
+                "user_id", 
+                "coins", 
+                "daily", 
+                "wins", 
+                "losses", 
+                "streak", 
+                "best_streak", 
+                "biggest_win", 
+                "biggest_loss"
+            ]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for user_id in self.coins_dict:
                 writer.writerow({
-                    "user_id"     : user_id, 
-                    "coins"       : self.coins_dict[user_id]["coins"],
-                    "daily"       : self.coins_dict[user_id]["daily"].strftime("%Y-%m-%d"),
-                    "wins"        : self.coins_dict[user_id]["wins"],
-                    "losses"      : self.coins_dict[user_id]["losses"],
-                    "streak"      : self.coins_dict[user_id]["streak"],
-                    "best_streak" : self.coins_dict[user_id]["best_streak"]
+                    "user_id"      : user_id, 
+                    "coins"        : self.coins_dict[user_id]["coins"],
+                    "daily"        : self.coins_dict[user_id]["daily"].strftime("%Y-%m-%d"),
+                    "wins"         : self.coins_dict[user_id]["wins"],
+                    "losses"       : self.coins_dict[user_id]["losses"],
+                    "streak"       : self.coins_dict[user_id]["streak"],
+                    "best_streak"  : self.coins_dict[user_id]["best_streak"],
+                    "biggest_win"  : self.coins_dict[user_id]["biggest_win"],
+                    "biggest_loss" : self.coins_dict[user_id]["biggest_loss"]
                 })
 
 
@@ -84,11 +98,13 @@ class YomoCoins:
         if user_id not in self.coins_dict: 
             self.coins_dict[user_id] = {}
             self.coins_dict[user_id]["daily"] = dt.date.today() - dt.timedelta(days=1)
-            self.coins_dict[user_id]["coins"]       = 0
-            self.coins_dict[user_id]["wins"]        = 0
-            self.coins_dict[user_id]["losses"]      = 0
-            self.coins_dict[user_id]["streak"]      = 0
-            self.coins_dict[user_id]["best_streak"] = 0
+            self.coins_dict[user_id]["coins"]        = 0
+            self.coins_dict[user_id]["wins"]         = 0
+            self.coins_dict[user_id]["losses"]       = 0
+            self.coins_dict[user_id]["streak"]       = 0
+            self.coins_dict[user_id]["best_streak"]  = 0
+            self.coins_dict[user_id]["biggest_win"]  = 0
+            self.coins_dict[user_id]["biggest_loss"] = 0
         log.info(f"""set_coins: {name}: {self.coins_dict[user_id]["coins"]} -> {coins}""")
         self.coins_dict[user_id]["coins"] = coins
 
@@ -114,7 +130,7 @@ class YomoCoins:
 
 
     # record a successful bet (and indirectly also set streak and best_streak)
-    def record_win(self, user_id: int): 
+    def record_win(self, user_id: int, amount: int): 
         # increment win counter
         new_wins = self.coins_dict[user_id]["wins"] + 1
         self.coins_dict[user_id]["wins"] = new_wins
@@ -127,6 +143,10 @@ class YomoCoins:
         if new_streak > self.coins_dict[user_id]["best_streak"]:
             self.coins_dict[user_id]["best_streak"] = new_streak
 
+        # record new biggest win if applicable
+        if amount > self.coins_dict[user_id]["biggest_win"]:
+            self.coins_dict[user_id]["biggest_win"] = amount
+
 
     # get a user's total losses
     def get_losses(self, user_id: int): 
@@ -134,13 +154,17 @@ class YomoCoins:
 
 
     # record a failed bet (and reset streak)
-    def record_loss(self, user_id: int): 
+    def record_loss(self, user_id: int, amount: int): 
         # increment loss counter
         new_losses = self.coins_dict[user_id]["losses"] + 1
         self.coins_dict[user_id]["losses"] = new_losses
 
         # reset streak counter
         self.coins_dict[user_id]["streak"] = 0
+
+        # record new biggest loss if applicable
+        if amount > self.coins_dict[user_id]["biggest_loss"]:
+            self.coins_dict[user_id]["biggest_loss"] = amount
 
 
     # get a user's current winning streak
@@ -153,6 +177,35 @@ class YomoCoins:
         return self.coins_dict[user_id]["best_streak"]
 
 
+    # get a user's biggest win amount
+    def get_biggest_win(self, user_id: int): 
+        return self.coins_dict[user_id]["biggest_win"]
+
+
+    # get a user's biggest loss amount
+    def get_biggest_loss(self, user_id: int): 
+        return self.coins_dict[user_id]["biggest_loss"]
+
+
     def is_richest_yomofan(self, user_id: int): 
         return user_id == max(self.coins_dict, key=lambda k: self.coins_dict[k]["coins"])
 
+
+    def get_winrate(self, user_id: int): 
+        wins   = self.get_wins(user_id)
+        losses = self.get_losses(user_id)
+        total  = wins + losses
+        if total > 0: 
+            return float(100 * wins / total)
+        else:
+            return 0
+
+
+    def sorted_winrate_list(self):
+        winrate_list = [
+            (user_id, self.get_winrate(user_id)) 
+            for user_id 
+            in self.coins_dict.keys() 
+            if self.get_wins(user_id) >= 25
+        ]
+        return sorted(winrate_list, key=lambda t: t[1], reverse=True) 

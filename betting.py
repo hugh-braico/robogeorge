@@ -21,6 +21,7 @@ class Betting:
         # dict of user ids to bet amounts
         self.bets = {}
         self.canceller_id = None
+        self.draft = "A draft image hasn't been linked yet, use `!draft <link>` to link one."
 
 
     # check if betting is active
@@ -83,6 +84,7 @@ class Betting:
             self.team1 = team1
             self.team2 = team2
             self.bets = {}
+            self.draft = "A draft image hasn't been linked yet, use `!draft <link>` to link one."
 
 
     # cancel betting round
@@ -98,6 +100,7 @@ class Betting:
             self.team1 = None
             self.team2 = None
             self.bets = {}
+            self.draft = "A draft image hasn't been linked yet, use `!draft <link>` to link one."
 
 
     # get team1
@@ -132,8 +135,18 @@ class Betting:
             return self.bets[user_id]
 
 
+    # get the link to the current draft image
+    def get_draft(self):
+        return self.draft
+
+
+    # set the link to the current draft image
+    def set_draft(self, link: str):
+        self.draft = link
+
+
     # place a new bet
-    def place_bet(self, user_id: int, team: int, amount: int): 
+    def place_bet(self, user_id: int, team: int, amount: int, display_emote: str): 
         if not self.is_active():
             raise Exception("Tried to use place_bet while betting not active")
         else: 
@@ -142,9 +155,10 @@ class Betting:
             elif team == 2:
                 betting_team = self.team2
             self.bets[user_id] = {
-                "team"     : betting_team, 
-                "amount"   : amount,
-                "team_num" : team
+                "team"          : betting_team, 
+                "amount"        : amount,
+                "team_num"      : team,
+                "display_emote" : display_emote
             }
 
 
@@ -157,7 +171,7 @@ class Betting:
             if team:
                 # return only the bets for this team
                 return [
-                    (u, self.bets[u]["team"], self.bets[u]["amount"]) 
+                    (u, self.bets[u]["team"], self.bets[u]["amount"], self.bets[u]["display_emote"]) 
                     for u 
                     in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=True)
                     if self.bets[u]["team"] == team
@@ -165,7 +179,7 @@ class Betting:
             else:
                 # return all bets
                 return [
-                    (u, self.bets[u]["team"], self.bets[u]["amount"]) 
+                    (u, self.bets[u]["team"], self.bets[u]["amount"], self.bets[u]["display_emote"]) 
                     for u 
                     in sorted(self.bets, key=lambda u: self.bets[u]["amount"], reverse=True)
                 ]
