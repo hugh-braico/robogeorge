@@ -501,38 +501,69 @@ async def slap(ctx, victim: User):
 # start betting round
 @bot.command(name='start', aliases=['startbets'], help="Start a new betting round")
 @commands.guild_only()
-async def startbets(ctx, team1: str="radiant", team2: str="dire", ping: str="ping"):
+async def startbets(ctx, *teams):
+
+    # unpack teams tuple into a list
+    teamlist = [team for team in teams]   
+
+    # unpack the noping flag
+    ping = True
+    if "noping" in teamlist: 
+        teamlist.remove("noping")
+        ping = False
+
+    # default teams if none are given
+    if not teamlist:
+        teamlist = ["radiant", "dire"]
+
+    # Check for existing betting round
     if betting.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is already an active betting round between "
-            f"{betting.get_team1()} and {betting.get_team2()}.\n"
+        await ctx.send(f"<:squint:749549668954013696> There is already an active betting round.\n" + 
             f"Either `!cancel` or `!winner` this round before starting another one.")
-    elif team1.lower() == team2.lower():
-        await ctx.send(f"<:squint:749549668954013696> Those team names are too similar.")
-    elif team1.isspace() or team2.isspace() or not team1.isprintable() or not team2.isprintable(): 
+
+    # Check for duplicates (case insensitive)
+    elif len(teamlist) < 2 or len(teamlist) > 10:
+        await ctx.send(f"❌ There can only be between 2 and 10 teams.")
+
+    # Check for duplicates (case insensitive)
+    #elif len(teamlist) != len(set(map(lambda t: t.lower(), teamlist))):
+    elif len(teamlist) != len({team.lower() for team in teamlist}):
+        await ctx.send(f"❌ Can't use duplicate team names.")
+
+    # Check for team names that are just whitespace or not printable characters
+    elif any([t.isspace() or not t.isprintable() for t in teamlist]): 
         await ctx.send(f"<:squint:749549668954013696> Those team names don't look very readable.")
-    elif team1 == "2" or team2 == "1": 
-        await ctx.send(f"<:squint:749549668954013696> Team names can't be the opposite of the shorthands for obvious reasons.")
-    elif len(team1) > 30 or len(team2) > 30: 
+
+    # Check for team names that are numbers but do not correspond to the shorthand
+    # fuck you python 3 for taking away tuple unpacking in lambdas
+    elif any([t.isdigit() and int(t) != n for (n,t) in enumerate(teamlist, 1)]): 
+        await ctx.send(f"<:squint:749549668954013696> If a team name is a number, it has to be the same number as the shorthand.")
+
+    # Teams can be no longer than 30 characters long 
+    elif any([len(t) > 30 for t in teamlist]): 
         await ctx.send(f"<:squint:749549668954013696> Those team names are a bit too long.")
+
+    # Bets have to be started in the betting channel (unless you're an admin)    
     elif ctx.channel.id != BETTING_CHANNEL and not ctx.author.guild_permissions.administrator:
         await ctx.send(f"""❌ That command is only allowed in {bot.get_channel(BETTING_CHANNEL).mention}.""")
+
     else:
-        log.info(f"!start: {ctx.author.name} started bet between {team1} and {team2}")
-        betting.start(team1, team2)
-        if ping == "ping":
+        log.info(f"!start: {ctx.author.name} started bet with teams {teamlist}")
+        betting.start(teamlist)
+        if ping:
             gamblers_role = discord.utils.get(ctx.guild.roles, name='yomocoin-gamblers')
-            gamblers_ping = f"{gamblers_role.mention}"
-        elif ping == "noping": 
-            gamblers_ping = "(Pinging gamblers disabled)"
-        else:
-            await ctx.send('<:squint:749549668954013696> Invalid command arguments. Maybe try `!help <command>`.')
-            return
+            gamblers_ping = f"{gamblers_role.mention}\n"
+        else: 
+            gamblers_ping = "\n"
 
         await ctx.send(
-            f"💰 Betting has started! Who will reign supreme? " + gamblers_ping + "\n" + 
-            f"To bet on **{team1}**, type `!bet \"{team1}\" <amount>` or simply `!bet 1 <amount>`.\n" + 
-            f"To bet on **{team2}**, type `!bet \"{team2}\" <amount>` or simply `!bet 2 <amount>`.\n" + 
-            f"To report the outcome, type `!winner \"{team1} OR {team2}\"` or simply `!winner <1 OR 2>`.\n" +
+            f"💰 Betting has started! Who will reign supreme? " + gamblers_ping + 
+            "\n".join([
+                f"To bet on **{t}**, type `!bet \"{t}\" <amount>` or simply `!bet {n} <amount>`."
+                for (n,t)
+                in enumerate(teamlist, 1)
+            ]) + 
+            f"\nTo report the outcome, type `!winner <team name>` or `!winner <team number>`.\n" +
             f"To cancel the round, type `!cancel`."
         )
     yc.save_coins_if_necessary("yomocoins.csv")
@@ -676,20 +707,18 @@ async def winner(ctx, team: str):
         await ctx.send(f"Betting is now over, but nobody placed any bets... <:soulless:681461973761654790>")
         betting.cancel()
     else:
-        team1 = betting.get_team1()
-        team2 = betting.get_team2()
-        if team == "1" or team.lower() == team1.lower():
-            winning_team = team1
-            losing_team  = team2
-        elif team == "2" or team.lower() == team2.lower():
-            winning_team = team2
-            losing_team  = team1
+        teamlist = betting.get_teamlist()
+
+        if team in teamlist:
+            winning_team = team
+        elif team.isdigit() and int(team) > 0 and int(team) <= len(teamlist):
+            winning_team = teamlist[int(team)-1]
         else:
             await ctx.send(f"<:vic:792318295709581333> That's not one of the teams.")
             return
 
         winners_list = betting.get_bets_list(winning_team)
-        losers_list  = betting.get_bets_list(losing_team)
+        losers_list  = betting.get_bets_list(winning_team, invert=True)
 
         # cancel as early as possible to make race conditions less likely (still possible, ofc)
         betting.cancel()
@@ -713,7 +742,7 @@ async def winner(ctx, team: str):
             win_float = float(bet_amount * total_pot) / float(winners_pot)
             win_amount = min(10*bet_amount, int(win_float))
 
-            # guarantee a profit of at least 1 coin as long as you bet at least 10
+            # guarantee a profit of at least 1 coin as long as you bet at least 10 (no rounding fuckery)
             if bet_amount >= 10: 
                 win_amount = max(bet_amount + 1, win_amount)
 
@@ -739,7 +768,7 @@ async def winner(ctx, team: str):
         yc.save_coins("yomocoins.csv")
 
 
-# !bet - make a new bet 
+# make a new bet 
 @bot.command(name='bet', help="Place a bet")
 @commands.guild_only()
 async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
@@ -750,15 +779,14 @@ async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
     elif ctx.channel.id != BETTING_CHANNEL and not ctx.author.guild_permissions.administrator:
         await ctx.send(f"""❌ That command is only allowed in {bot.get_channel(BETTING_CHANNEL).mention}.""")
     else:
-        team1 = betting.get_team1()
-        team2 = betting.get_team2()
+        teamlist = betting.get_teamlist()
         user_id = ctx.author.id
         user_coins = yc.get_coins(user_id)
 
         # users are allowed to up existing bets for the same team if they want
         if betting.bet_exists(user_id):
             existing_bet = betting.get_bet(user_id)
-            existing_team = existing_bet["team_num"]
+            existing_team = existing_bet["team"]
             existing_amount = existing_bet["amount"]
         else:
             existing_amount = 0
@@ -778,6 +806,7 @@ async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
             await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
         elif amount <= 0: 
             await ctx.send(f"<:squint:749549668954013696> Invalid amount of YomoCoins.")
+
         # in the case a user is increasing an existing bet, 
         # we have to temporarily consider those coins as part of a user's effective coins
         elif (user_coins + existing_amount) < amount: 
@@ -787,17 +816,16 @@ async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
                 await ctx.send(f"<:squint:749549668954013696> You only have 1 YomoCoin to bet. Maybe try `!centrelink`?")
             else:
                 await ctx.send(f"<:squint:749549668954013696> You only have {user_coins} YomoCoins left to bet with.")
+
         else:
             # team name-related error checking
-            if team == "1" or team.lower() == team1.lower():
-                betting_team = 1
-                display_team = team1
-            elif team == "2" or team.lower() == team2.lower():
-                betting_team = 2
-                display_team = team2
+            if team in teamlist:
+                betting_team = team
+            elif team.isdigit() and int(team) > 0 and int(team) <= len(teamlist):
+                betting_team = teamlist[int(team)-1]
             else:
-                await ctx.send(f"<:squint:749549668954013696> I don't recognise that team name.\n"
-                    f"Use the full name in double quotes, or just 1 for {team1} or 2 for {team2}.")
+                await ctx.send(f"<:squint:749549668954013696> I don't recognise that team.\n"
+                    f"Use the full name (in double quotes if there are spaces), or just its number.")
                 return
 
             if betting.bet_exists(user_id):
@@ -806,15 +834,15 @@ async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
                 elif amount == existing_amount:
                     await ctx.send(f"<:squint:749549668954013696> You've already placed this exact bet.")
                 else:
-                    log.info(f"!bet: user {ctx.author.name} increased their bet from {existing_amount} to {amount} on {team}")
+                    log.info(f"!bet: user {ctx.author.name} increased their bet from {existing_amount} to {amount} on {betting_team}")
                     await ctx.send(f"💰 Bet increased from {existing_amount} to {amount}.")
                     betting.place_bet(user_id, betting_team, amount, display_emote)
                     yc.set_coins(user_id, user_coins - (amount - existing_amount), ctx.author.name)
             else: 
-                log.info(f"!bet: user {ctx.author.name} bet {amount} on {team}")
+                log.info(f"!bet: user {ctx.author.name} bet {amount} on {betting_team}")
                 betting.place_bet(user_id, betting_team, amount, display_emote)
                 yc.set_coins(user_id, user_coins - amount, ctx.author.name)
-                await ctx.send(f"💰 Bet placed on **{display_team}** for {amount} YomoCoins! Good luck.")
+                await ctx.send(f"💰 Bet placed on **{betting_team}** for {amount} YomoCoins! Good luck.")
 
 
 # bet all of your coins at once
@@ -842,7 +870,7 @@ async def betall(ctx, team: str):
         await bet(ctx, team, amount + existing_amount, "BoxingChimp")
 
 
-# bet all of your coins at once
+# bet a random amount of coins
 @bot.command(name='betnana', help="!bets a random amount for a random team")
 @commands.guild_only()
 async def betnana(ctx):
@@ -859,15 +887,16 @@ async def betnana(ctx):
         await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to bet. Maybe try `!centrelink`?")
     elif betting.bet_exists(user_id):
         await ctx.send(f"❌ Can't use `!betnana` if you've already bet.")
-    else:   
-        team = str(random.randint(1,2))
+    else:
+        teamlist = betting.get_teamlist()
+        team = str(random.randint(1, len(teamlist)))
         amount = random.randint(1, user_coins)
         await ctx.send("<:vic:792318295709581333>")
         await bet(ctx, team, amount, "vic")
 
 
-# bet all of your coins at once on a random team
-@bot.command(name='betnanaall', aliases=["betallnana"], help="!bets all of your coins on a random team")
+# bet all of your coins at once, on a random team
+@bot.command(name='betnanaall', aliases=["betallnana", "betnanall"], help="!bets all of your coins on a random team")
 @commands.guild_only()
 async def betnanaall(ctx):
     user_id = ctx.author.id
@@ -884,7 +913,8 @@ async def betnanaall(ctx):
     elif betting.bet_exists(user_id):
         await ctx.send(f"❌ Can't do that if you've already bet.")
     else:   
-        team = str(random.randint(1,2))
+        teamlist = betting.get_teamlist()
+        team = str(random.randint(1, len(teamlist)))
         await ctx.send("<:vic:792318295709581333>")
         await bet(ctx, team, user_coins, "vic")
 
@@ -899,17 +929,14 @@ async def listbets(ctx):
         await ctx.send(f"The current round is between **{betting.get_team1()}** (1) and **{betting.get_team2()}** (2).\nNobody has made a bet yet.")
     else:
         # Team names
-        team1 = betting.get_team1()
-        team2 = betting.get_team2()
-        
-        # List of bets for each team
-        team1_list = betting.get_bets_list(team1)
-        team2_list = betting.get_bets_list(team2)
+        teamlist = betting.get_teamlist()
+
+        # List of bets for each team (ie. a list of lists)
+        bets_list_list = [betting.get_bets_list(t) for t in teamlist]
 
         # Calculate pot sizes
-        team1_pot = sum([amount for (u_, t_, amount, e_) in team1_list])
-        team2_pot = sum([amount for (u_, t_, amount, e_) in team2_list])
-        total_pot = int((team1_pot + team2_pot)*1.1)
+        pot_list = [sum([amount for (u_, t_, amount, e_) in bets_list]) for bets_list in bets_list_list]
+        total_pot = int(sum(pot_list)*1.1)
 
         # Display a nice padlock emoji if the betting is locked
         if betting.is_locked():
@@ -918,33 +945,26 @@ async def listbets(ctx):
             lock_indicator = ""
 
         # If nobody is betting on a particular team yet, we don't need to put a header 
-        # This is pretty jank, but whatever
-        if len(team1_list) > 0:
-            team1_list_header = f"\n\nYomoFans betting on **{team1}** ({team1_pot} YomoCoins):\n"
-        else: 
-            team1_list_header = ""
+        def bets_display_text(team, pot_size, bets_list):
+            if not bets_list:
+                return ""
+            else:
+                return f"YomoFans betting on **{team}** ({pot_size} YomoCoins):\n" + \
+                    '\n'.join([   
+                        f"""{emote} **{get_username(user_id)}** bet {amount} YomoCoins ({float(100.0 * amount / pot_size):.1f}%)."""
+                        for (user_id, team, amount, emote)
+                        in bets_list
+                    ]) + "\n\n"
 
-        if len(team2_list) > 0:
-            team2_list_header = f"\n\nYomoFans betting on **{team2}** ({team2_pot} YomoCoins):\n"
-        else: 
-            team2_list_header = ""
+        # Short enumerated list of teams and their numbers
+        # Basically produces "Team1 (1), Team2 (2), and Team3 (3)"
+        enumerated_team_list = ", ".join(f"**{t}** ({n})" for (n,t) in enumerate(teamlist[:-1], 1)) + " and " + f"**{teamlist[-1]}** ({len(teamlist)})"
 
         # Finally, piece together the message
         await ctx.send(
-            f"💰 The current round is between **{team1}** (1) and **{team2}** (2). " + lock_indicator + 
-            f"\nTotal pot size: **{total_pot} YomoCoins**" + 
-            team1_list_header + 
-            '\n'.join([   
-                f"""{emote} **{get_username(user_id)}** bet {amount} YomoCoins ({float(100.0 * amount / team1_pot):.1f}%)."""
-                for (user_id, team, amount, emote)
-                in team1_list
-            ]) + 
-            team2_list_header + 
-            '\n'.join([   
-                f"""{emote} **{get_username(user_id)}** bet {amount} YomoCoins ({float(100.0 * amount / team2_pot):.1f}%)."""
-                for (user_id, team, amount, emote)
-                in team2_list
-            ])
+            f"💰 The current round is between " + enumerated_team_list + ". " + lock_indicator + 
+            f"\nTotal pot size: **{total_pot} YomoCoins**\n\n" + 
+            "".join([bets_display_text(t, p, bl) for (t, p, bl) in zip(teamlist, pot_list, bets_list_list)])
         )
 
 
