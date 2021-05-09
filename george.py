@@ -6,13 +6,17 @@ import sys
 import random
 import traceback
 import asyncio
+import aiohttp
+from dotenv import load_dotenv
+
 from discord import User
 from discord.ext import commands
-from dotenv import load_dotenv
+
 import yomocoins
 import betting
-import aiohttp
+import dueling
 
+# logging stuff
 import logging
 log = logging.getLogger("yomo")
 log.setLevel(logging.DEBUG)
@@ -40,6 +44,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 # initialize yomocoins and betting modules
 yc = yomocoins.YomoCoins()
 betting = betting.Betting()
+dueling = dueling.Dueling()
 
 # funny mmr maps between userid and a datetime (when to next generate a mmr change) 
 mmr_dict = {}
@@ -58,10 +63,17 @@ async def on_ready():
 
 
 # simple ping test
-@bot.command(name='ping', help='Ping test')
+@bot.command(name='ping', aliases=['pong'], help='Ping test')
 @commands.guild_only()
 async def ping(ctx):
     await ctx.send(f"🏓 approx. latency = {round(bot.latency, 3)}s");
+
+
+# cum
+@bot.command(name='cum', aliases=['kum'], help='Ping test')
+@commands.guild_only()
+async def cum(ctx):
+    await ctx.send(f"`* But nobody came.`");
 
 
 # simple ping test
@@ -95,7 +107,7 @@ async def bang(ctx):
 
 
 # funny meme mmr command
-@bot.command(name='mmr', help='Check how your MMR is doing')
+@bot.command(name='mmr', aliases=["MMR"], help='Check how your MMR is doing')
 @commands.guild_only()
 async def mmr(ctx):
     user_id = ctx.author.id
@@ -106,7 +118,7 @@ async def mmr(ctx):
             await ctx.send("📈 Your MMR has gone up!")
         else:
             await ctx.send("📉 Your MMR has gone down...")
-        # Add a somewhat random amount of minutes between checks
+        # Add a somewhat random amount of minutes between changes
         random_minutes = random.randint(30,300)
         mmr_dict[user_id] = now + dt.timedelta(minutes=random_minutes)
     else: 
@@ -266,6 +278,7 @@ async def save(ctx):
 async def list(ctx, options: str ="default"):
     if options == "all":
         if ctx.channel.id != BETTING_CHANNEL:
+            total_coins = sum([yc.get_coins(user_id) for user_id in yc.sorted_coins_list()])
             await ctx.send('\n'.join([   
                 f"""🪙 {placing}. **{get_username(user_id)}**: {yc.get_coins(user_id)} YomoCoins.""" 
                 for (placing, user_id) in enumerate(yc.sorted_coins_list(), 1)
@@ -330,6 +343,13 @@ async def single_coins(ctx, user: User = None):
     else: 
         await ctx.send(f"""🪙 {user.name} has **{coins}** YomoCoins.""")
 
+
+# print all yomocoins in circulation
+@bot.command(name='totalcoins', aliases=['allcoins', 'economy'], help="Calculate total number of coins in circulation")
+async def totalcoins(ctx):
+    total_coins = sum([yc.get_coins(uid) for uid in yc.sorted_coins_list()])
+    await ctx.send(f"""🪙 Total number of coins in circulation: **{total_coins}** YomoCoins.""")
+
     
 # print one person's betting stats
 @bot.command(name='stats', help="Betting statistics for yourself (or a specific user)")
@@ -391,6 +411,8 @@ async def centrelink(ctx, option: str=None):
         await ctx.send(f"❌ You are the richest YomoFan, so your Centrelink payments have been cancelled.")
     elif betting.bet_exists(recipient_id):
         await ctx.send(f"❌ Can't claim Centrelink while betting (or you would be able to cheat the means test).")
+    elif dueling.is_active() and dueling.get_challenger() == recipient_id:
+        await ctx.send(f"❌ Can't claim Centrelink while dueling (or you would be able to cheat the means test).")
     else:
         recipient_coins = yc.get_coins(recipient_id)
         if recipient_coins < 87: 
@@ -504,6 +526,7 @@ async def startbets(ctx, team1: str="radiant", team2: str="dire", ping: str="pin
             gamblers_ping = "(Pinging gamblers disabled)"
         else:
             await ctx.send('<:squint:749549668954013696> Invalid command arguments. Maybe try `!help <command>`.')
+            return
 
         await ctx.send(
             f"💰 Betting has started! Who will reign supreme? " + gamblers_ping + "\n" + 
@@ -609,8 +632,8 @@ async def lock_bets(ctx, timer: int=0):
 
 @bot.command(name='autolock', help="Alias for !lock 180")
 @commands.guild_only()
-async def autolock(ctx):
-    await lock_bets(ctx, 180)
+async def autolock(ctx, timer: int=180):
+    await lock_bets(ctx, timer)
 
 
 # cancel auto lock 
@@ -745,7 +768,7 @@ async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
         elif emote == "BoxingChimp":
             display_emote = "<a:BoxingChimp:795509491637682186>"
         elif emote == "vic": 
-            display_emote = "<:vic:780232729173164112>"
+            display_emote = "<:vic:792318295709581333>"
         else:
             await ctx.send('<:squint:749549668954013696> Invalid command arguments. Maybe try `!help <command>`.') 
             return
@@ -795,7 +818,7 @@ async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
 
 
 # bet all of your coins at once
-@bot.command(name='betall', help="Same as !bet but bets all of your coins")
+@bot.command(name='betall', aliases=["allin"], help="Same as !bet but bets all of your coins")
 @commands.guild_only()
 async def betall(ctx, team: str):
     user_id = ctx.author.id
@@ -839,8 +862,31 @@ async def betnana(ctx):
     else:   
         team = str(random.randint(1,2))
         amount = random.randint(1, user_coins)
-        await ctx.send("<:vic:780232729173164112>")
+        await ctx.send("<:vic:792318295709581333>")
         await bet(ctx, team, amount, "vic")
+
+
+# bet all of your coins at once on a random team
+@bot.command(name='betnanaall', aliases=["betallnana"], help="!bets all of your coins on a random team")
+@commands.guild_only()
+async def betnanaall(ctx):
+    user_id = ctx.author.id
+    user_coins = yc.get_coins(user_id)
+
+    if not betting.is_active(): 
+        await ctx.send(f"There is no active betting round happening. Use `!start team1 team2` to start one.")
+    elif betting.is_locked(): 
+        await ctx.send(f"🔒 Betting is locked for the remainder of this round.")
+    elif user_coins is None:
+        await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif user_coins == 0: 
+        await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to bet. Maybe try `!centrelink`?")
+    elif betting.bet_exists(user_id):
+        await ctx.send(f"❌ Can't do that if you've already bet.")
+    else:   
+        team = str(random.randint(1,2))
+        await ctx.send("<:vic:792318295709581333>")
+        await bet(ctx, team, user_coins, "vic")
 
 
 # list current bets
@@ -939,6 +985,212 @@ async def rigbet(ctx):
             "Replacing a random member of the other team with a bot."
         ]
         await ctx.send("✅ The round is now rigged. " + random.choice(rig_messages) + "\nMake sure not to use this command outside of the secret mod channel.")
+
+################################################################################
+#
+### Dueling 
+### Duels are just 1v1 coinflip bets with no pot bonus
+
+# start dueling round
+@bot.command(name='duel', aliases=['challenge', 'startduel'], help="Challenge a user to a duel")
+@commands.guild_only()
+async def startduel(ctx, accepter: User, amount: int):
+    yc.backup_coins()
+    challenger = ctx.author
+    challenger_coins = yc.get_coins(challenger.id)
+    accepter_coins = yc.get_coins(accepter.id)    
+
+    if dueling.is_active(): 
+        await ctx.send(
+            f"<:squint:749549668954013696> There is already an active duel between " +
+            f"{get_username(dueling.get_challenger())} and {get_username(dueling.get_accepter())}.\n" +
+            f"Finish this duel (`!accept`, `reject`) before starting another."
+        )
+    elif challenger_coins is None:
+        await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif accepter_coins is None: 
+        await ctx.send(f"<:squint:749549668954013696> {accepter.name} doesn't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif challenger.id == accepter.id: 
+        await ctx.send(f"<:squint:749549668954013696> You can't challenge yourself to a duel.")
+    elif amount <= 0: 
+        await ctx.send(f"<:squint:749549668954013696> Invalid duel stakes amount.")
+    elif challenger_coins < amount: 
+        if challenger_coins == 0: 
+            await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to duel with. Maybe try `!centrelink`?")
+        elif challenger_coins == 1:
+            await ctx.send(f"<:squint:749549668954013696> You only have 1 YomoCoin to duel with. Maybe try `!centrelink`?")
+        else:
+            await ctx.send(f"<:squint:749549668954013696> You only have {challenger_coins} YomoCoins to duel with.")
+    elif accepter_coins < amount: 
+        if accepter_coins == 0: 
+            await ctx.send(f"<:squint:749549668954013696> {accepter.name} doesn't have any YomoCoins to duel for.")
+        elif accepter_coins == 1:
+            await ctx.send(f"<:squint:749549668954013696> {accepter.name} only has 1 YomoCoin to duel for.")
+        else:
+            await ctx.send(f"<:squint:749549668954013696> {accepter.name} only has {accepter_coins} YomoCoins to duel for.")
+    else:
+        log.info(f"!startduel: {challenger.name} challenged {get_username(accepter.name)} to a duel for {amount}")
+        dueling.start(challenger.id, accepter.id, amount)
+        yc.set_coins(challenger.id, challenger_coins - amount, challenger.name)
+        await ctx.send(
+            f"⚔️ {challenger.name} has challenged {accepter.name} to a duel for **{amount} YomoCoins!** Will they accept?\n" +
+            f"Type `!accept` to accept the duel, or `!reject` to decline. Mods can use `!cancelduel`."
+        )
+    yc.save_coins_if_necessary("yomocoins.csv")
+
+
+# random duel
+@bot.command(name='duelnana', help="Duel someone for a random amount")
+@commands.guild_only()
+async def duelnana(ctx, accepter: User):
+    challenger = ctx.author
+    challenger_coins = yc.get_coins(challenger.id)
+    accepter_coins = yc.get_coins(accepter.id)    
+
+    if dueling.is_active(): 
+        await ctx.send(
+            f"<:squint:749549668954013696> There is already an active duel between " +
+            f"{get_username(dueling.get_challenger())} and {get_username(dueling.get_accepter())}.\n" +
+            f"Finish this duel (`!accept`, `reject`) before starting another."
+        )
+    elif challenger_coins is None:
+        await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif challenger_coins == 0: 
+        await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to duel with. Maybe try `!centrelink`?")
+    elif accepter_coins is None: 
+        await ctx.send(f"<:squint:749549668954013696> {accepter.name} doesn't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif accepter_coins == 0: 
+        await ctx.send(f"<:squint:749549668954013696> {accepter.name} doesn't have any YomoCoins to duel for.")
+    else:   
+        amount = random.randint(1, min(challenger_coins, accepter_coins))
+        await ctx.send("<:vic:792318295709581333>")
+        await startduel(ctx, accepter, amount)
+    yc.save_coins_if_necessary("yomocoins.csv")
+
+
+# duel version of betall
+@bot.command(name='duelall', help="Duel someone for the maximum amount")
+@commands.guild_only()
+async def duelall(ctx, accepter: User):
+    challenger = ctx.author
+    challenger_coins = yc.get_coins(challenger.id)
+    accepter_coins = yc.get_coins(accepter.id)    
+
+    if dueling.is_active(): 
+        await ctx.send(
+            f"<:squint:749549668954013696> There is already an active duel between " +
+            f"{get_username(dueling.get_challenger())} and {get_username(dueling.get_accepter())}.\n" +
+            f"Finish this duel (`!accept`, `reject`) before starting another."
+        )
+    elif challenger_coins is None:
+        await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif challenger_coins == 0: 
+        await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to duel with. Maybe try `!centrelink`?")
+    elif accepter_coins is None: 
+        await ctx.send(f"<:squint:749549668954013696> {accepter.name} doesn't appear to be in the YomoCoins system yet. Use `!optin`")
+    elif accepter_coins == 0: 
+        await ctx.send(f"<:squint:749549668954013696> {accepter.name} doesn't have any YomoCoins to duel for.")
+    else:   
+        amount = min(challenger_coins, accepter_coins)
+        await ctx.send(f"https://cdn.discordapp.com/emojis/769258836803452948.gif")
+        await startduel(ctx, accepter, amount)
+    yc.save_coins_if_necessary("yomocoins.csv")
+
+
+@bot.command(name='accept', aliases=['acceptduel'], help="Accept a challenge to duel")
+@commands.guild_only()
+async def acceptduel(ctx):
+    yc.backup_coins()
+    accepter = ctx.author
+    accepter_coins = yc.get_coins(accepter.id) 
+
+    if not dueling.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There is no active duel to accept.")      
+    elif dueling.get_accepter() != accepter.id: 
+        await ctx.send(f"<:squint:749549668954013696> Only {get_username(dueling.get_accepter())} can accept this duel.")
+    elif accepter_coins < dueling.get_amount():
+        if accepter_coins == 0: 
+            await ctx.send(
+                f"<:squint:749549668954013696> You can no longer afford to accept - you have have no YomoCoins to duel with.\n" +
+                f"<a:morshu:814687320166629396> Come back when you're a little err... richer! (Or use `!reject`)."
+            )
+        elif accepter_coins == 1:
+            await ctx.send(
+                f"<:squint:749549668954013696> You can no longer afford to accept - you only have 1 YomoCoin to duel with.\n" +
+                f"<a:morshu:814687320166629396> Come back when you're a little err... richer! (Or use `!reject`)."
+            )
+        else:
+            await ctx.send(
+                f"<:squint:749549668954013696> You can no longer afford to accept - you only have {accepter_coins} YomoCoins to duel with.\n" +
+                f"<a:morshu:814687320166629396> Come back when you're a little err... richer! (Or use `!reject`)."
+            )    
+    else:
+        amount = dueling.get_amount()
+        yc.set_coins(accepter.id, accepter_coins - amount, accepter.name)
+
+        challenger_id = dueling.get_challenger()
+        challenger_name = get_username(challenger_id)
+
+        await ctx.send(f"⚔️ Duel accepted! Fighting...");
+        await asyncio.sleep(3)
+
+        # literally rigged - but only for really big duels
+        if amount >= 1000 and challenger_id == SEAJAY:
+            flip_result = 1;
+        elif amount >= 1000 and accepter.id == SEAJAY:
+            flip_result = 2;
+        else:
+            flip_result = random.randint(1,2)
+
+        if flip_result == 1: 
+            await ctx.send(f"⚔️ {challenger_name} is victorious! They won {amount} YomoCoins from {accepter.name}.");
+            challenger_coins = yc.get_coins(challenger_id) 
+            yc.set_coins(challenger_id, challenger_coins + amount*2, challenger_name)
+        else: 
+            await ctx.send(f"⚔️ {accepter.name} is victorious! They took {amount} YomoCoins from {challenger_name}.");
+            accepter_coins = yc.get_coins(accepter.id) 
+            yc.set_coins(accepter.id, accepter_coins + amount*2, accepter.name)
+        dueling.cancel()
+        yc.backup_coins()
+
+
+@bot.command(name='reject', aliases=['rejectduel'], help="Reject a challenge to duel")
+@commands.guild_only()
+async def rejectduel(ctx):
+    yc.backup_coins()
+    accepter = ctx.author
+    accepter_coins = yc.get_coins(accepter.id) 
+
+    if not dueling.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There is no active duel to reject.")      
+    elif dueling.get_accepter() != accepter.id: 
+        await ctx.send(f"<:squint:749549668954013696> Only {get_username(dueling.get_accepter())} can reject this duel.")   
+    else:
+        amount = dueling.get_amount()
+        challenger_id = dueling.get_challenger()
+        challenger_name = get_username(challenger_id)
+        challenger_coins = yc.get_coins(challenger_id) 
+        yc.set_coins(challenger_id, challenger_coins + amount, challenger_name)
+        dueling.cancel()
+        await ctx.send(f"⚔️ The challenge has been rejected. {amount} YomoCoins have been returned to {challenger_name}.");
+        yc.backup_coins()
+
+
+@bot.command(name='cancelduel', help="Cancel a challenge to duel (mods only)")
+@commands.has_permissions(administrator=True)
+@commands.guild_only()
+async def cancelduel(ctx):
+    if not dueling.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There is no active duel to cancel.")      
+    else:
+        amount = dueling.get_amount()
+        challenger_id = dueling.get_challenger()
+        challenger_name = get_username(challenger_id)
+        challenger_coins = yc.get_coins(challenger_id) 
+        yc.set_coins(challenger_id, challenger_coins + amount, challenger_name)
+        dueling.cancel()
+        await ctx.send(f"⚔️ The duel has been cancelled. {amount} YomoCoins have been returned to {challenger_name}.");
+        yc.backup_coins()
 
 
 ################################################################################
