@@ -9,62 +9,55 @@ class Dueling:
 
     # constructor
     def __init__(self):
-        # is there a dueling round currently active? 
-        self.active = False
-        # The participants of the duel (user IDs)
-        self.challenger = None
-        self.accepter = None
-        # The stakes of the duel
-        self.amount = None
-        
-
-    # check if a duel exists
-    def is_active(self): 
-        return self.active
+        # Simple list of (challenger_id, accepter_id, amount) tuples
+        # There aren't going to be enough concurrent duels that this even approaches being a problem
+        self.duels = []
 
 
-    # start dueling round
+    # Find bet by challenger id and accepter id, return amount if found and None if not found
+    def duel_exists(self, cid: int, aid: int):
+        found = next((duel for duel in self.duels if duel[0] == cid and duel[1] == aid), None)
+        if found: 
+            return found[2]
+        else:
+            return None
+
+
+    # get amount for a specific duel - just syntactic sugar for duel_exists
+    def get_amount(self, cid: int, aid: int):
+        return self.duel_exists(cid, aid)
+
+
+    # start a new dueling round
     def start(self, challenger: int, accepter: int, amount: int):
-        if self.is_active():
-            raise Exception("Tried to use start while dueling active")
+        if self.duel_exists(challenger, accepter):
+            raise Exception(f"dueling: start(): Tried to add duplicate duel ({challenger}, {accepter}, {amount})")
         else:
-            self.active = True 
-            self.challenger = challenger
-            self.accepter = accepter
-            self.amount = amount
+            self.duels.append((challenger, accepter, amount))
 
 
-    # cancel dueling round
-    # does not give each user their money back, so that has to be handled separately
-    def cancel(self): 
-        if not self.is_active():
-            raise Exception("Tried to use cancel while dueling not active")
+    # remove dueling round
+    # does not give each user their money back, so that has to be handled separately (!)
+    def remove(self, challenger: int, accepter: int):
+        amount = self.duel_exists(challenger, accepter)
+        if not amount:
+            raise Exception(f"dueling: remove(): Tried to remove a duel that does not exist ({challenger}, {accepter}, x)") 
         else:
-            self.active = False
-            self.challenger = None
-            self.accepter = None
-            self.amount = None
+            self.duels.remove((challenger, accepter, amount))
 
 
-    # get challenger
-    def get_challenger(self):
-        if not self.is_active():
-            raise Exception("Tried to use get_challenger while dueling not active")
-        else: 
-            return self.challenger
+    # get all duels sorted in descending amount order
+    # optionally filter by challenger and/or accepter
+    def get_duels(self, challenger: int=None, accepter: int=None):
+        result = self.duels
+        if challenger:
+            result = [duel for duel in result if duel[0] == challenger]
+        if accepter: 
+            result = [duel for duel in result if duel[1] == accepter]
+        return sorted(result, key=lambda d: d[2], reverse=True)
 
 
-    # get accepter
-    def get_accepter(self):
-        if not self.is_active():
-            raise Exception("Tried to use get_accepter while dueling not active")
-        else: 
-            return self.accepter
-
-
-    # get amount
-    def get_amount(self):
-        if not self.is_active():
-            raise Exception("Tried to use get_amount while dueling not active")
-        else: 
-            return self.amount
+    # get all duels that involve a certain user (on either side)
+    def get_duels_involving(self, user_id: int):
+        result = [duel for duel in self.duels if duel[0] == user_id or duel[1] == user_id]
+        return sorted(result, key=lambda d: d[2], reverse=True)

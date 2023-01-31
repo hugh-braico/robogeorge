@@ -34,6 +34,9 @@ class YomoCoins:
                 self.coins_dict[user_id]["best_streak"]  = int(row["best_streak"])
                 self.coins_dict[user_id]["biggest_win"]  = int(row["biggest_win"])
                 self.coins_dict[user_id]["biggest_loss"] = int(row["biggest_loss"])
+                self.coins_dict[user_id]["duel_profits"] = int(row["duel_profits"])
+                # yeah im piggybacking off this table to store steam ids as well
+                self.coins_dict[user_id]["steam_id"]     = row["steam_id"]
 
 
     # save YomoCoins file to disk
@@ -49,7 +52,9 @@ class YomoCoins:
                 "streak", 
                 "best_streak", 
                 "biggest_win", 
-                "biggest_loss"
+                "biggest_loss",
+                "duel_profits",
+                "steam_id"
             ]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
@@ -63,7 +68,9 @@ class YomoCoins:
                     "streak"       : self.coins_dict[user_id]["streak"],
                     "best_streak"  : self.coins_dict[user_id]["best_streak"],
                     "biggest_win"  : self.coins_dict[user_id]["biggest_win"],
-                    "biggest_loss" : self.coins_dict[user_id]["biggest_loss"]
+                    "biggest_loss" : self.coins_dict[user_id]["biggest_loss"],
+                    "duel_profits" : self.coins_dict[user_id]["duel_profits"],
+                    "steam_id"     : self.coins_dict[user_id]["steam_id"]
                 })
 
 
@@ -105,6 +112,8 @@ class YomoCoins:
             self.coins_dict[user_id]["best_streak"]  = 0
             self.coins_dict[user_id]["biggest_win"]  = 0
             self.coins_dict[user_id]["biggest_loss"] = 0
+            self.coins_dict[user_id]["duel_profits"] = 0
+            self.coins_dict[user_id]["steam_id"]     = ""
         log.info(f"""set_coins: {name}: {self.coins_dict[user_id]["coins"]} -> {coins}""")
         self.coins_dict[user_id]["coins"] = coins
 
@@ -209,3 +218,38 @@ class YomoCoins:
             if self.get_wins(user_id) >= 25
         ]
         return sorted(winrate_list, key=lambda t: t[1], reverse=True) 
+
+
+    def get_duel_profit(self, user_id: int): 
+        return self.coins_dict[user_id]["duel_profits"]
+
+
+    def record_duel_profit(self, user_id: int, amount: int): 
+        new_profit = self.coins_dict[user_id]["duel_profits"] + amount
+        self.coins_dict[user_id]["duel_profits"] = new_profit
+
+
+    # get a user's steamid
+    def get_steam_id(self, user_id: int):
+        if user_id not in self.coins_dict: 
+            return None
+        else:
+            return self.coins_dict[user_id]["steam_id"]
+
+
+    # set a user's coins (and add them to the database if they didn't exist before)
+    def set_steam_id(self, user_id: int, id_str: str, name: str):
+        if user_id not in self.coins_dict: 
+            self.coins_dict[user_id] = {}
+            self.coins_dict[user_id]["daily"] = dt.date.today() - dt.timedelta(days=1)
+            self.coins_dict[user_id]["coins"]        = 310
+            self.coins_dict[user_id]["wins"]         = 0
+            self.coins_dict[user_id]["losses"]       = 0
+            self.coins_dict[user_id]["streak"]       = 0
+            self.coins_dict[user_id]["best_streak"]  = 0
+            self.coins_dict[user_id]["biggest_win"]  = 0
+            self.coins_dict[user_id]["biggest_loss"] = 0
+            self.coins_dict[user_id]["duel_profits"] = 0
+            self.coins_dict[user_id]["steam_id"]     = ""
+        log.info(f"""set_steam_id: {name}: {self.coins_dict[user_id]["steam_id"]} -> {id_str}""")
+        self.coins_dict[user_id]["steam_id"] = id_str

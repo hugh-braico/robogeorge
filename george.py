@@ -1,6 +1,8 @@
 import os
 import discord
 import csv
+import json
+import re
 import datetime as dt
 import sys
 import random
@@ -11,6 +13,7 @@ from dotenv import load_dotenv
 
 from discord import User
 from discord.ext import commands
+from discord_components import DiscordComponents, Button
 
 import yomocoins
 import betting
@@ -31,7 +34,8 @@ log.addHandler(fh)
 
 # load environment variables
 load_dotenv()
-TOKEN           = os.getenv('DISCORD_TOKEN')
+DISCORD_TOKEN   = os.getenv('DISCORD_TOKEN')
+STEAM_API_TOKEN = os.getenv('STEAM_API_TOKEN')
 SEAJAY          = int(os.getenv('SEAJAY'))
 BETTING_CHANNEL = int(os.getenv('BETTING_CHANNEL'))
 SPAM_CHANNEL    = int(os.getenv('SPAM_CHANNEL'))
@@ -46,9 +50,6 @@ yc = yomocoins.YomoCoins()
 betting = betting.Betting()
 dueling = dueling.Dueling()
 
-# funny mmr maps between userid and a datetime (when to next generate a mmr change) 
-mmr_dict = {}
-
 
 ################################################################################
 #
@@ -57,6 +58,7 @@ mmr_dict = {}
 # print server connection info
 @bot.event
 async def on_ready():
+    DiscordComponents(bot)
     log.info(f'{bot.user} is connected to the following server(s):')
     for guild in bot.guilds:
         log.info(f'    {guild.name} (id: {guild.id})')
@@ -70,14 +72,14 @@ async def ping(ctx):
 
 
 # cum
-@bot.command(name='cum', aliases=['kum'], help='Ping test')
+@bot.command(name='cum', aliases=['kum'], help='kum')
 @commands.guild_only()
 async def cum(ctx):
     await ctx.send(f"`* But nobody came.`");
 
 
-# simple ping test
-@bot.command(name='coinflip', help='Flips a coin')
+# flip a coin
+@bot.command(name='coinflip', aliases=['flip', 'toss', 'cointoss'], help='Flips a coin')
 @commands.guild_only()
 async def coinflip(ctx, option1: str = "heads", option2: str = "tails"):
     await ctx.send(f"Flipping...");
@@ -97,6 +99,9 @@ async def bang(ctx):
         if betting.is_active(): 
             await ctx.send("❌ `!cancel` or `!winner` the current betting round before shutting down.")
         else:
+            # Cancel all duels first 
+            for duel in dueling.get_duels():
+                await cancelduel(ctx, bot.get_user(duel[0]), bot.get_user(duel[1]))
             await ctx.send("<:sadcat:712998237975478282> Saving YomoCoins database and shutting down...")
             yc.save_coins("yomocoins.csv")
             yc.backup_coins()
@@ -104,25 +109,6 @@ async def bang(ctx):
             await bot.close()
     else: 
         await ctx.send("<:squint:749549668954013696> You don't have the right permissions to do that.")
-
-
-# funny meme mmr command
-@bot.command(name='mmr', aliases=["MMR"], help='Check how your MMR is doing')
-@commands.guild_only()
-async def mmr(ctx):
-    user_id = ctx.author.id
-    now = dt.datetime.now()
-    if user_id not in mmr_dict or mmr_dict[user_id] < now:
-        flip_result = random.randint(1,2)
-        if flip_result == 1: 
-            await ctx.send("📈 Your MMR has gone up!")
-        else:
-            await ctx.send("📉 Your MMR has gone down...")
-        # Add a somewhat random amount of minutes between changes
-        random_minutes = random.randint(30,300)
-        mmr_dict[user_id] = now + dt.timedelta(minutes=random_minutes)
-    else: 
-        await ctx.send("Your MMR has not changed since you last checked.")
 
 
 # basic error handling
@@ -280,7 +266,7 @@ async def list(ctx, options: str ="default"):
         if ctx.channel.id != BETTING_CHANNEL:
             total_coins = sum([yc.get_coins(user_id) for user_id in yc.sorted_coins_list()])
             await ctx.send('\n'.join([   
-                f"""🪙 {placing}. **{get_username(user_id)}**: {yc.get_coins(user_id)} YomoCoins.""" 
+                f"""🪙 {placing}. **{get_username(user_id)}**: {yc.get_coins(user_id)}.""" 
                 for (placing, user_id) in enumerate(yc.sorted_coins_list(), 1)
             ]))
         else:  
@@ -368,32 +354,37 @@ async def betting_stats(ctx, user: User = None):
         best_streak  = yc.get_best_streak(user_id)
         biggest_win  = yc.get_biggest_win(user_id)
         biggest_loss = yc.get_biggest_loss(user_id)
+        duel_profit  = yc.get_duel_profit(user_id)
 
         # watch out for funny divide-by-zero pitfall
         if total_bets > 0: 
             win_float = float(100 * wins / total_bets)
             win_rate = f"{win_float:.2f}%"
         else:
+            win_float = None
             win_rate = "N/A"
 
-        if win_float >= 50.0: 
+        if not win_float: 
+            display_emote = "📊"
+        elif win_float >= 50.0: 
             display_emote = "📈"
         else:
             display_emote = "📉"
 
         await ctx.send(
             display_emote + f" **{user.name}**'s betting stats:\n" + 
-            f"**Wins:** {wins}/{total_bets}\n" + 
-            f"**Win rate:** {win_rate}\n" + 
-            f"**Current win streak:** {streak}\n" + 
-            f"**Best win streak:** {best_streak}\n" + 
-            f"**Biggest win:** {biggest_win}\n" + 
-            f"**Biggest loss:** {biggest_loss}" 
+            f"**Betting wins:** {wins}/{total_bets}\n" + 
+            f"**Betting win rate:** {win_rate}\n" + 
+            f"**Current betting win streak:** {streak}\n" + 
+            f"**Best betting win streak:** {best_streak}\n" + 
+            f"**Biggest betting win:** {biggest_win}\n" + 
+            f"**Biggest betting loss:** {biggest_loss}\n" + 
+            f"**Duel profits:** {duel_profit}" 
         ) 
     
 
 # claim daily coins 
-@bot.command(name='centrelink', aliases=['cenno', "cenny", "gimme", "newstart", "jobkeeper", "jobseeker", "dole", "youthallowance"], help="Claim a daily 25 coins")
+@bot.command(name='centrelink', aliases=["c", "cenno", "cenny", "gimme", "newstart", "jobkeeper", "jobseeker", "dole", "youthallowance"], help="Claim a daily 25 coins")
 @commands.guild_only()
 async def centrelink(ctx, option: str=None):
     recipient_id = ctx.author.id
@@ -409,22 +400,30 @@ async def centrelink(ctx, option: str=None):
         await ctx.send(f"❌ You have failed the means test, so your Centrelink payments have been cancelled.")
     elif yc.is_richest_yomofan(recipient_id):
         await ctx.send(f"❌ You are the richest YomoFan, so your Centrelink payments have been cancelled.")
-    elif betting.bet_exists(recipient_id):
-        await ctx.send(f"❌ Can't claim Centrelink while betting (or you would be able to cheat the means test).")
-    elif dueling.is_active() and dueling.get_challenger() == recipient_id:
-        await ctx.send(f"❌ Can't claim Centrelink while dueling (or you would be able to cheat the means test).")
     else:
+        # Use open bets and duels to calculate a user's "real" coins for the purposes of cenno 
         recipient_coins = yc.get_coins(recipient_id)
-        if recipient_coins < 87: 
+        effective_coins = recipient_coins
+        if betting.bet_exists(recipient_id):
+            existing_bet = betting.get_bet(recipient_id)
+            effective_coins += existing_bet["amount"]
+        for duel in dueling.get_duels(challenger=recipient_id):
+            effective_coins += duel[2]
+
+        # Calculate cenno payout depending on user's effective coins
+        if effective_coins < 87: 
             daily_amount = 50
-        elif recipient_coins < 135:
-            daily_amount = int(93 - recipient_coins/2)
-        elif recipient_coins < 1975:
+        elif effective_coins < 135:
+            daily_amount = int(93 - effective_coins/2)
+        elif effective_coins < 1975:
             daily_amount = 25
-        elif recipient_coins < 2023:
-            daily_amount = int(1012 - recipient_coins/2)
+        elif effective_coins < 2023:
+            daily_amount = int(1012 - effective_coins/2)
         else: 
-            daily_amount = 0
+            await ctx.send(f"❌ When factoring in active bet/duel money, you don't qualify for Centrelink payments.")
+            return
+
+        # Pay out cenno
         log.info(f"!centrelink: {ctx.author.name} claiming {daily_amount} coins") 
         yc.set_coins(recipient_id, recipient_coins + daily_amount, ctx.author.name)
         yc.set_daily_claimed(recipient_id)
@@ -434,16 +433,20 @@ async def centrelink(ctx, option: str=None):
         yc.save_coins_if_necessary("yomocoins.csv")
 
 
-# spend 100 coins to remove rand(5,15) of someone else's (they will always hold onto their last coin though)
-@bot.command(name='slap', help="Spend 200 coins to take away ~10 of someone's coins")
+# spend a large amount of coins to remove a small amount of someone else's 
+# (they will always hold onto their last coin though)
+@bot.command(name='slap', help="Spend 200 coins to take away ~25 of someone's coins")
 @commands.guild_only()
 async def slap(ctx, victim: User):
     slapper = ctx.author
     slapper_coins = yc.get_coins(slapper.id)
     victim_coins = yc.get_coins(victim.id)
+
+    # Slap power
     slap_cost = 200
-    slap_amount = random.randint(10,15)
-    crit_chance = 0.02
+    slap_amount = random.randint(20,30)
+    crit_chance = 0.03
+    crit_multiplier = 8
 
     if slapper_coins is None:
         await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
@@ -461,10 +464,9 @@ async def slap(ctx, victim: User):
     elif victim_coins <= 1: 
         await ctx.send(f"<:squint:749549668954013696> **{victim.name}** is too poor for it to be worth slapping them.")
     else: 
-        # funny critical hit
         crit_roll = random.random() 
         if crit_roll < crit_chance: 
-            slap_amount *= 12
+            slap_amount *= crit_multiplier
             is_critical = True
         else:
             is_critical = False
@@ -566,6 +568,7 @@ async def startbets(ctx, *teams):
             f"\nTo report the outcome, type `!winner <team name>` or `!winner <team number>`.\n" +
             f"To cancel the round, type `!cancel`."
         )
+
     yc.save_coins_if_necessary("yomocoins.csv")
 
 
@@ -682,6 +685,38 @@ async def stopautolock(ctx):
         await ctx.send(f"⏱️ Auto lock has been stopped.")
 
 
+# report first blood - automatically set autolock to 30
+@bot.command(name='firstblood', aliases=['fb'], help="Report first blood")
+@commands.guild_only()
+async def bet(ctx, team: str):
+    if not betting.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
+    elif betting.is_locked(): 
+        await ctx.send(f"🔒 Betting is already locked, it no longer matters who got first blood.")
+    elif ctx.channel.id != BETTING_CHANNEL and not ctx.author.guild_permissions.administrator:
+        await ctx.send(f"""❌ That command is only allowed in {bot.get_channel(BETTING_CHANNEL).mention}.""")
+    else:
+        teamlist = betting.get_teamlist()
+
+        # team name-related error checking
+        # need to construct lowercase versions of the team names for case insensitivity
+        team_lower = team.lower()
+        teamlist_lower = [t.lower() for t in teamlist]
+        if team_lower in teamlist_lower:
+            fb_team = teamlist[teamlist_lower.index(team_lower)]
+        elif team.isdigit() and int(team) > 0 and int(team) <= len(teamlist):
+            fb_team = teamlist[int(team)-1]
+        else:
+            await ctx.send(f"<:squint:749549668954013696> I don't recognise that team.\n"
+                f"Use the full name (in double quotes if there are spaces), or just its number.")
+            return
+        
+        log.info(f"!bet: user {ctx.author.name} reported first blood as {fb_team}")
+        await ctx.send(f"🔪 **{fb_team} has scored first blood!**")
+        betting.set_autolock(False)
+        await lock_bets(ctx, 30)
+
+        
 # unlock betting round
 @bot.command(name='unlock', help="Opposite of lock (admin only)")
 @commands.has_permissions(administrator=True)
@@ -709,8 +744,11 @@ async def winner(ctx, team: str):
     else:
         teamlist = betting.get_teamlist()
 
-        if team in teamlist:
-            winning_team = team
+        # need to construct lowercase versions of the team names for case insensitivity
+        team_lower = team.lower()
+        teamlist_lower = [t.lower() for t in teamlist]
+        if team_lower in teamlist_lower:
+            winning_team = teamlist[teamlist_lower.index(team_lower)]
         elif team.isdigit() and int(team) > 0 and int(team) <= len(teamlist):
             winning_team = teamlist[int(team)-1]
         else:
@@ -819,8 +857,11 @@ async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
 
         else:
             # team name-related error checking
-            if team in teamlist:
-                betting_team = team
+            # need to construct lowercase versions of the team names for case insensitivity
+            team_lower = team.lower()
+            teamlist_lower = [t.lower() for t in teamlist]
+            if team_lower in teamlist_lower:
+                betting_team = teamlist[teamlist_lower.index(team_lower)]
             elif team.isdigit() and int(team) > 0 and int(team) <= len(teamlist):
                 betting_team = teamlist[int(team)-1]
             else:
@@ -866,7 +907,7 @@ async def betall(ctx, team: str):
             existing_amount = existing_bet["amount"]
         else:
             existing_amount = 0
-        await ctx.send(f"https://cdn.discordapp.com/emojis/769258836803452948.gif")
+        await ctx.send(f"<a:BoxingChimp:795509491637682186>")
         await bet(ctx, team, amount + existing_amount, "BoxingChimp")
 
 
@@ -925,8 +966,6 @@ async def betnanaall(ctx):
 async def listbets(ctx):
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
-    elif betting.is_empty():
-        await ctx.send(f"The current round is between **{betting.get_team1()}** (1) and **{betting.get_team2()}** (2).\nNobody has made a bet yet.")
     else:
         # Team names
         teamlist = betting.get_teamlist()
@@ -966,6 +1005,56 @@ async def listbets(ctx):
             f"\nTotal pot size: **{total_pot} YomoCoins**\n\n" + 
             "".join([bets_display_text(t, p, bl) for (t, p, bl) in zip(teamlist, pot_list, bets_list_list)])
         )
+
+
+# list current bets
+@bot.command(name='payout', help="See the potential payout of the bet as it stands")
+@commands.guild_only()
+async def listbets(ctx, user: User=None):
+    if not betting.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
+    elif betting.is_empty():
+        await ctx.send(f"The current round is between **{betting.get_team1()}** (1) and **{betting.get_team2()}** (2).\nNobody has made a bet yet.")
+    else:
+        if user:
+            betting_user = user
+        else:
+            betting_user = ctx.author
+
+        # figure out which team this user is betting on
+        if not betting.bet_exists(betting_user.id):
+            await ctx.send(f"<:squint:749549668954013696> You haven't bet in this round yet.")
+        else:
+            # "Assuming" our team wins for the purposes of the payout calculation 
+            existing_bet = betting.get_bet(betting_user.id)
+            winning_team = existing_bet["team"]
+            bet_amount = existing_bet["amount"]
+
+            teamlist = betting.get_teamlist()
+
+            winners_list = betting.get_bets_list(winning_team)
+            losers_list  = betting.get_bets_list(winning_team, invert=True)
+
+            winners_pot = sum([amount for (u_, t_, amount, e_) in winners_list])
+            losers_pot  = sum([amount for (u_, t_, amount, e_) in losers_list])
+            total_pot   = int((winners_pot + losers_pot)*1.1)
+
+            win_float = float(bet_amount * total_pot) / float(winners_pot)
+            win_amount = min(10*bet_amount, int(win_float)) 
+            profit = win_amount - bet_amount
+            multiplier = float(float(win_amount) / float(bet_amount))
+
+            # guarantee a profit of at least 1 coin as long as you bet at least 10 (no rounding fuckery)
+            if bet_amount >= 10: 
+                win_amount = max(bet_amount + 1, win_amount)
+
+            log.info(f"!payout: forecasting a {win_float:.3f} rounded to {win_amount} payout for {betting_user.name}")
+
+            await ctx.send(f"<:sorisring:770642052782358530> **{betting_user.name}** stands to win {win_amount} YomoCoins!" + 
+                f"\nThat's a net gain of {profit} YomoCoins, or a multiplier of {multiplier:.2f}x!"
+            )
+
+
 
 
 # post or request the latest lineup
@@ -1011,6 +1100,30 @@ async def rigbet(ctx):
 ### Dueling 
 ### Duels are just 1v1 coinflip bets with no pot bonus
 
+# get all current duel challenges
+@bot.command(name='duels', aliases=['allduels', 'listduels'], help="List all currently open duels")
+@commands.guild_only()
+async def listduels(ctx, involving: User=None):
+    if involving:
+        duels = dueling.get_duels_involving(involving.id)
+    else:
+        duels = dueling.get_duels()
+
+    if not duels:
+        if involving:
+            await ctx.send(f"There are no duels involving that user currently active.")
+        else:
+            await ctx.send(f"There are no duels currently active.")
+    else:
+        await ctx.send(
+            "\n".join([
+                f"⚔️ {get_username(challenger_id)} is challenging {get_username(accepter_id)} for {amount} YomoCoins."
+                for (challenger_id, accepter_id, amount)
+                in duels
+            ])
+        )
+
+
 # start dueling round
 @bot.command(name='duel', aliases=['challenge', 'startduel'], help="Challenge a user to a duel")
 @commands.guild_only()
@@ -1018,13 +1131,23 @@ async def startduel(ctx, accepter: User, amount: int):
     yc.backup_coins()
     challenger = ctx.author
     challenger_coins = yc.get_coins(challenger.id)
-    accepter_coins = yc.get_coins(accepter.id)    
+    accepter_coins = yc.get_coins(accepter.id)
+    max_duels = 5    
 
-    if dueling.is_active(): 
+    if dueling.duel_exists(challenger.id, accepter.id): 
         await ctx.send(
-            f"<:squint:749549668954013696> There is already an active duel between " +
-            f"{get_username(dueling.get_challenger())} and {get_username(dueling.get_accepter())}.\n" +
-            f"Finish this duel (`!accept`, `reject`) before starting another."
+            f"<:squint:749549668954013696> You are already challenging that user to a duel.\n" +
+            f"Finish that duel (`!accept`, `!reject`, `!revoke`) before starting another."
+        )
+    elif dueling.duel_exists(accepter.id, challenger.id): 
+        await ctx.send(
+            f"<:squint:749549668954013696> That user is already challenging YOU to a duel.\n" +
+            f"Finish that duel (`!accept`, `!reject`, `!revoke`) before starting another."
+        )
+    elif len(dueling.get_duels(challenger=challenger.id)) >= max_duels: 
+        await ctx.send(
+            f"❌ You are already challenging the maximum amount of users ({max_duels}).\n" +
+            f"Finish at least one of these duels (`!accept`, `!reject`, `!revoke`) before starting another."
         )
     elif challenger_coins is None:
         await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
@@ -1049,7 +1172,7 @@ async def startduel(ctx, accepter: User, amount: int):
         else:
             await ctx.send(f"<:squint:749549668954013696> {accepter.name} only has {accepter_coins} YomoCoins to duel for.")
     else:
-        log.info(f"!startduel: {challenger.name} challenged {get_username(accepter.name)} to a duel for {amount}")
+        log.info(f"!startduel: {challenger.name} challenged {accepter.name} to a duel for {amount}")
         dueling.start(challenger.id, accepter.id, amount)
         yc.set_coins(challenger.id, challenger_coins - amount, challenger.name)
         await ctx.send(
@@ -1067,11 +1190,15 @@ async def duelnana(ctx, accepter: User):
     challenger_coins = yc.get_coins(challenger.id)
     accepter_coins = yc.get_coins(accepter.id)    
 
-    if dueling.is_active(): 
+    if dueling.duel_exists(challenger.id, accepter.id): 
         await ctx.send(
-            f"<:squint:749549668954013696> There is already an active duel between " +
-            f"{get_username(dueling.get_challenger())} and {get_username(dueling.get_accepter())}.\n" +
-            f"Finish this duel (`!accept`, `reject`) before starting another."
+            f"<:squint:749549668954013696> You are already challenging that user to a duel.\n" +
+            f"Finish that duel (`!accept`, `!reject`, `!revoke`) before starting another."
+        )
+    elif dueling.duel_exists(accepter.id, challenger.id): 
+        await ctx.send(
+            f"<:squint:749549668954013696> That user is already challenging YOU to a duel.\n" +
+            f"Finish that duel (`!accept`, `!reject`, `!revoke`) before starting another."
         )
     elif challenger_coins is None:
         await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
@@ -1094,13 +1221,17 @@ async def duelnana(ctx, accepter: User):
 async def duelall(ctx, accepter: User):
     challenger = ctx.author
     challenger_coins = yc.get_coins(challenger.id)
-    accepter_coins = yc.get_coins(accepter.id)    
+    accepter_coins = yc.get_coins(accepter.id)  
 
-    if dueling.is_active(): 
+    if dueling.duel_exists(challenger.id, accepter.id): 
         await ctx.send(
-            f"<:squint:749549668954013696> There is already an active duel between " +
-            f"{get_username(dueling.get_challenger())} and {get_username(dueling.get_accepter())}.\n" +
-            f"Finish this duel (`!accept`, `reject`) before starting another."
+            f"<:squint:749549668954013696> You are already challenging that user to a duel.\n" +
+            f"Finish that duel (`!accept`, `!reject`, `!revoke`) before starting another."
+        )
+    elif dueling.duel_exists(accepter.id, challenger.id): 
+        await ctx.send(
+            f"<:squint:749549668954013696> That user is already challenging YOU to a duel.\n" +
+            f"Finish that duel (`!accept`, `!reject`, `!revoke`) before starting another."
         )
     elif challenger_coins is None:
         await ctx.send(f"<:squint:749549668954013696> You don't appear to be in the YomoCoins system yet. Use `!optin`")
@@ -1112,23 +1243,52 @@ async def duelall(ctx, accepter: User):
         await ctx.send(f"<:squint:749549668954013696> {accepter.name} doesn't have any YomoCoins to duel for.")
     else:   
         amount = min(challenger_coins, accepter_coins)
-        await ctx.send(f"https://cdn.discordapp.com/emojis/769258836803452948.gif")
+        await ctx.send(f"<a:BoxingChimp:795509491637682186>")
         await startduel(ctx, accepter, amount)
     yc.save_coins_if_necessary("yomocoins.csv")
 
 
+# accept a duel
+# If there are multiple challengers then you can specify which one by giving them as an argument
 @bot.command(name='accept', aliases=['acceptduel'], help="Accept a challenge to duel")
 @commands.guild_only()
-async def acceptduel(ctx):
+async def acceptduel(ctx, challenger: User=None):
     yc.backup_coins()
     accepter = ctx.author
     accepter_coins = yc.get_coins(accepter.id) 
 
-    if not dueling.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is no active duel to accept.")      
-    elif dueling.get_accepter() != accepter.id: 
-        await ctx.send(f"<:squint:749549668954013696> Only {get_username(dueling.get_accepter())} can accept this duel.")
-    elif accepter_coins < dueling.get_amount():
+    # get a list of valid duels 
+    if challenger: 
+        valid_duels = dueling.get_duels(challenger=challenger.id, accepter=accepter.id)
+    else:
+        valid_duels = dueling.get_duels(accepter=accepter.id)
+   
+    # Case where there are no valid duels to choose from
+    if not valid_duels:
+        if challenger: 
+            await ctx.send(
+                f"<:squint:749549668954013696> That user is not currently challenging you to a duel.\n" +
+                f"Use !duels to see the active duel challenges."
+            )
+        else: 
+            await ctx.send(
+                f"<:squint:749549668954013696> You have no incoming duel challenges to accept.\n" +
+                f"Use !duels to see the active duel challenges."
+            )
+        return
+    # Case where multiple valid duels are present
+    elif len(valid_duels) > 1: 
+        await ctx.send(
+            f"<:squint:749549668954013696> There are multiple people challenging you - use their user mention to specify which.\n" +
+            f"Use !duels to see the active duel challenges."
+        )
+        return
+
+    # Now we can be sure there is exactly 1 valid duel, so let's unpack the challenger and amount 
+    valid_duel = valid_duels[0]
+    amount = valid_duel[2]
+
+    if accepter_coins < amount:
         if accepter_coins == 0: 
             await ctx.send(
                 f"<:squint:749549668954013696> You can no longer afford to accept - you have have no YomoCoins to duel with.\n" +
@@ -1143,16 +1303,22 @@ async def acceptduel(ctx):
             await ctx.send(
                 f"<:squint:749549668954013696> You can no longer afford to accept - you only have {accepter_coins} YomoCoins to duel with.\n" +
                 f"<a:morshu:814687320166629396> Come back when you're a little err... richer! (Or use `!reject`)."
-            )    
+            )  
     else:
-        amount = dueling.get_amount()
         yc.set_coins(accepter.id, accepter_coins - amount, accepter.name)
 
-        challenger_id = dueling.get_challenger()
+        challenger_id = valid_duel[0]
         challenger_name = get_username(challenger_id)
 
         await ctx.send(f"⚔️ Duel accepted! Fighting...");
-        await asyncio.sleep(3)
+
+        # Wait different amounts for different magnitudes to build suspense
+        if amount < 25:
+            await asyncio.sleep(1)
+        elif amount < 1000:
+            await asyncio.sleep(3)
+        else:
+            await asyncio.sleep(7)
 
         flip_result = random.randint(1,2)
 
@@ -1160,52 +1326,252 @@ async def acceptduel(ctx):
             await ctx.send(f"⚔️ {challenger_name} is victorious! They won {amount} YomoCoins from {accepter.name}.");
             challenger_coins = yc.get_coins(challenger_id) 
             yc.set_coins(challenger_id, challenger_coins + amount*2, challenger_name)
+            yc.record_duel_profit(challenger_id,  amount)
+            yc.record_duel_profit(accepter.id,   -amount)
         else: 
             await ctx.send(f"⚔️ {accepter.name} is victorious! They took {amount} YomoCoins from {challenger_name}.");
             accepter_coins = yc.get_coins(accepter.id) 
             yc.set_coins(accepter.id, accepter_coins + amount*2, accepter.name)
-        dueling.cancel()
+            yc.record_duel_profit(challenger_id, -amount)
+            yc.record_duel_profit(accepter.id,    amount)
+        dueling.remove(challenger_id, accepter.id)
         yc.backup_coins()
 
 
+# reject a duel
+# If there are multiple challengers then you can specify which one by giving them as an argument
 @bot.command(name='reject', aliases=['rejectduel'], help="Reject a challenge to duel")
 @commands.guild_only()
-async def rejectduel(ctx):
+async def rejectduel(ctx, challenger: User=None):
     yc.backup_coins()
-    accepter = ctx.author
-    accepter_coins = yc.get_coins(accepter.id) 
+    rejecter = ctx.author
+    rejecter_coins = yc.get_coins(rejecter.id)     
 
-    if not dueling.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is no active duel to reject.")      
-    elif dueling.get_accepter() != accepter.id: 
-        await ctx.send(f"<:squint:749549668954013696> Only {get_username(dueling.get_accepter())} can reject this duel.")   
+    # get a list of valid duels 
+    if challenger: 
+        valid_duels = dueling.get_duels(challenger=challenger.id, accepter=rejecter.id)
     else:
-        amount = dueling.get_amount()
-        challenger_id = dueling.get_challenger()
-        challenger_name = get_username(challenger_id)
-        challenger_coins = yc.get_coins(challenger_id) 
-        yc.set_coins(challenger_id, challenger_coins + amount, challenger_name)
-        dueling.cancel()
-        await ctx.send(f"⚔️ The challenge has been rejected. {amount} YomoCoins have been returned to {challenger_name}.");
-        yc.backup_coins()
+        valid_duels = dueling.get_duels(accepter=rejecter.id)
+   
+    # Case where there are no valid duels to choose from
+    if not valid_duels:
+        if challenger: 
+            await ctx.send(
+                f"<:squint:749549668954013696> That user is not currently challenging you to a duel.\n" +
+                f"Use !duels to see the active duel challenges."
+            )
+        else: 
+            await ctx.send(
+                f"<:squint:749549668954013696> You have no incoming duel challenges to reject.\n" +
+                f"Use !duels to see the active duel challenges."
+            )
+        return
+    # Case where multiple valid duels are present
+    elif len(valid_duels) > 1: 
+        await ctx.send(
+            f"<:squint:749549668954013696> There are multiple people challenging you - use their user mention to specify which.\n" +
+            f"Use !duels to see the active duel challenges."
+        )
+        return
+  
+    # Now we can be sure there is exactly 1 valid duel, so let's unpack the information about the duel 
+    valid_duel = valid_duels[0]
+    amount = valid_duel[2]
+    challenger_id = valid_duel[0]
+    challenger_name = get_username(challenger_id)
+    challenger_coins = yc.get_coins(challenger_id) 
+
+    yc.set_coins(challenger_id, challenger_coins + amount, challenger_name)
+    dueling.remove(challenger_id, rejecter.id)
+    await ctx.send(f"⚔️ The challenge has been rejected. {amount} YomoCoins have been returned to {challenger_name}.");
+    yc.backup_coins()
 
 
+# revoke a duel (like reject, but for a duel *you* started)
+# If there are multiple accepters then you can specify which one by giving them as an argument
+@bot.command(name='revoke', aliases=['revokeduel'], help="Take back a challenge to duel")
+@commands.guild_only()
+async def revokeduel(ctx, accepter: User=None):
+    yc.backup_coins()
+    challenger = ctx.author    
+
+    # get a list of valid duels 
+    if accepter: 
+        valid_duels = dueling.get_duels(challenger=challenger.id, accepter=accepter.id)
+    else:
+        valid_duels = dueling.get_duels(challenger=challenger.id)
+   
+    # Case where there are no valid duels to choose from
+    if not valid_duels:
+        if accepter: 
+            await ctx.send(
+                f"<:squint:749549668954013696> You are not currently challenging that user to a duel.\n" +
+                f"Use !duels to see the active duel challenges."
+            )
+        else: 
+            await ctx.send(
+                f"<:squint:749549668954013696> You are not currently challenging anybody to a duel.\n" +
+                f"Use !duels to see the active duel challenges."
+            )
+        return
+    # Case where multiple valid duels are present
+    elif len(valid_duels) > 1: 
+        await ctx.send(
+            f"<:squint:749549668954013696> You are challenging multiple users - use their user mention to specify which.\n" +
+            f"Use !duels to see the active duel challenges."
+        )
+        return
+  
+    # Now we can be sure there is exactly 1 valid duel, so let's unpack the information about the duel 
+    valid_duel = valid_duels[0]
+    amount = valid_duel[2]
+    accepter_id = valid_duel[1] 
+    challenger_coins = yc.get_coins(challenger.id) 
+
+    yc.set_coins(challenger.id, challenger_coins + amount, challenger.name)
+    dueling.remove(challenger.id, accepter_id)
+    await ctx.send(f"⚔️ The challenge has been revoked. {amount} YomoCoins have been returned to {challenger.name}.");
+    yc.backup_coins()
+
+
+# cancel a duel (mods only command)
 @bot.command(name='cancelduel', help="Cancel a challenge to duel (mods only)")
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
-async def cancelduel(ctx):
-    if not dueling.is_active(): 
-        await ctx.send(f"<:squint:749549668954013696> There is no active duel to cancel.")      
+async def cancelduel(ctx, challenger: User, accepter: User):
+    if not dueling.duel_exists(challenger.id, accepter.id):
+        await ctx.send(f"<:squint:749549668954013696> That duel doesn't currently exist.")
     else:
-        amount = dueling.get_amount()
-        challenger_id = dueling.get_challenger()
-        challenger_name = get_username(challenger_id)
-        challenger_coins = yc.get_coins(challenger_id) 
-        yc.set_coins(challenger_id, challenger_coins + amount, challenger_name)
-        dueling.cancel()
-        await ctx.send(f"⚔️ The duel has been cancelled. {amount} YomoCoins have been returned to {challenger_name}.");
+        amount = dueling.get_amount(challenger.id, accepter.id)
+        challenger_name = get_username(challenger.id)
+        challenger_coins = yc.get_coins(challenger.id) 
+        yc.set_coins(challenger.id, challenger_coins + amount, challenger.name)
+        dueling.remove(challenger.id, accepter.id) 
+        await ctx.send(f"⚔️ The duel has been cancelled. {amount} YomoCoins have been returned to {challenger.name}.");
         yc.backup_coins()
 
+################################################################################
+#
+### Steam lobby links
+
+
+async def async_get_json(url): 
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                return await response.read()
+            else:
+                return None
+
+
+@bot.command(name='steamid', aliases=['steam_id', 'steam'], help="Register your Steam ID for lobby link posting")
+@commands.guild_only()
+async def register_steam_id(ctx, arg):
+    help_message = "`!steamid` usage: enter your full Steam profile URL or just the " + \
+        "last part, e.g. `!steamid http://steamcommunity.com/id/robinwalker/` " + \
+        "or `!steamid robinwalker`. DON'T just enter your current Steam nickname, " + \
+        "e.g. `!steamid Jim`, or it will think you are `http://steamcommunity.com/id/Jim/`"
+
+    if not arg:
+        await ctx.send(help_message)
+        return
+
+    match = re.match(r'https?://steamcommunity\.com/(id|profiles)/([^/]+)/?', arg)
+    if match:
+        # they supplied a profile URL
+        id_str = match.group(2)
+    elif "/" not in arg and len(arg) <= 200: 
+        # they supplied just the ID part
+        id_str = arg
+    else:
+        await ctx.send(help_message)
+        return
+
+    steam_idUrl = "http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=" + STEAM_API_TOKEN + "&vanityurl=" + id_str
+    contents = await async_get_json(steam_idUrl)
+    if contents:
+        data = json.loads(contents)
+        if data["response"] is None:
+            await ctx.send("SteamAPI: ResolveVanityURL() failed for " + ctx.author.name + ". Is the Steam Web API down?")
+            return
+        else:
+            if "steamid" in data["response"].keys():
+                yc.set_steam_id(ctx.author.id, data["response"]["steamid"], ctx.author.name)
+                await ctx.send("Saved " + ctx.author.name + "'s Steam ID.")
+            elif id_str.isdigit():
+                yc.set_steam_id(ctx.author.id, id_str, ctx.author.name)
+                await ctx.send("Saved " + ctx.author.name + "'s Steam ID.")
+            else:
+                await ctx.send("Could not find Steam ID: " + id_str + ".\n" + help_message)
+    else:
+        await ctx.send("Error: failed to find " + ctx.author.name + "'s Steam ID.")
+
+
+@bot.command(name='lobby', help="Post a steam lobby link")
+@commands.guild_only()
+async def post_lobby_link(ctx):
+    steam_id = yc.get_steam_id(ctx.author.id)
+    if steam_id:
+        profileUrl = "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=" + STEAM_API_TOKEN + "&steamids=" + steam_id
+        contents = await async_get_json(profileUrl)
+        if contents:
+            data = json.loads(contents)
+            if "response" in data.keys():
+                pdata = data["response"]["players"][0]
+                if "lobbysteamid" in pdata.keys():
+                    steamLobbyUrl = "steam://joinlobby/" + pdata["gameid"] + "/" + pdata["lobbysteamid"] + "/" + steam_id
+                    gameName = ""
+                    if "gameextrainfo" in pdata.keys():
+                        gameName = pdata["gameextrainfo"] + " "
+                    await ctx.send(ctx.author.name + "'s " + gameName + "lobby: " + steamLobbyUrl)
+                    return
+                else:
+                    # Steam didn't give us a lobby ID. But why?
+                    # Let's test if their profile's Game Details are public by seeing if Steam will tell us how many games they own.
+                    ownedGamesUrl = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=" + STEAM_API_TOKEN + "&steamid=" + steam_id + "&include_played_free_games=1"
+                    ownedGamesContents = await async_get_json(ownedGamesUrl)
+                    if ownedGamesContents:
+                        ownedGamesData = json.loads(ownedGamesContents)
+                        if "response" in ownedGamesData.keys():
+                            if "game_count" in ownedGamesData["response"].keys() and ownedGamesData["response"]["game_count"] > 0:
+                                # They have public Game Details. Let's make sure we can see their account, and that they're online
+                                if pdata["communityvisibilitystate"] == 3: # If the bot can view whether or not the player's Steam account is online https://developer.valvesoftware.com/wiki/Steam_Web_API#GetPlayerSummaries_.28v0002.29
+                                    if "personastate" in pdata.keys() and pdata["personastate"] > 0:
+                                        # They have public Game Details, Steam thinks they're online. Let's see if they're in a game!
+                                        if "gameid" in pdata.keys():
+                                            gameName = ""
+                                            if "gameextrainfo" in pdata.keys():
+                                                gameName = pdata["gameextrainfo"]
+                                            else:
+                                                gameName = "a game"
+                                            await ctx.send("Lobby not found for " + ctx.author.name + ": Steam thinks you're playing " + gameName + " but not in a lobby.")
+                                            return
+                                        else:
+                                            await ctx.send("Lobby not found for " + ctx.author.name + ": Steam thinks you're online but not playing a game.")
+                                            return
+                                    else:
+                                        await ctx.send("Lobby not found for " + ctx.author.name + ": Steam thinks you're offline. Make sure you're connected to Steam, and not set to Appear Offline on your friends list.")
+                                        return
+                                else:
+                                    await ctx.send("Lobby not found for " + ctx.author.name + ": Your profile is not public, so the bot can't see if you're in a lobby.")
+                                    return
+                            else:
+                                await ctx.send("Lobby not found for " + ctx.author.name + ": Your profile's Game Details are not public, so the bot can't see if you're in a lobby.")
+                                return
+                        else:
+                            await ctx.send("SteamAPI: GetOwnedGames() failed for " + ctx.author.name + ". Is the Steam Web API down?")
+                            return
+                    else:
+                        await ctx.send("SteamAPI: GetOwnedGames() failed for " + ctx.author.name + ". Is the Steam Web API down?")
+                        return
+            else:
+                await ctx.send("SteamAPI: GetPlayerSummaries() failed for " + ctx.author.name + ". Is the Steam Web API down?")
+                return
+        else:
+            await ctx.send("SteamAPI: GetPlayerSummaries() failed for " + ctx.author.name + ". Is the Steam Web API down?")
+            return
+    else:
+        await ctx.send("Steam ID not found for " + ctx.author.name +  ". Try `!steamid` to register one")
 
 ################################################################################
 #
@@ -1213,4 +1579,4 @@ async def cancelduel(ctx):
 if __name__ == "__main__":
     yc.load_coins("yomocoins.csv")
     yc.backup_coins()
-    bot.run(TOKEN)
+    bot.run(DISCORD_TOKEN)
