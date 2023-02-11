@@ -478,7 +478,7 @@ async def slap(ctx, victim: User):
 
         await ctx.send(f"💥👏 You paid a hitman {slap_cost} YomoCoins to slap **{victim.name}**.\n")
         if is_critical: 
-            await ctx.send("https://cdn.discordapp.com/attachments/396643053600899084/799859207620657152/critical_hit.png \n")
+            await ctx.send("https://i.imgur.com/OcX6cCf.png \n")
 
         if victim_coins > slap_amount: 
             yc.set_coins(victim.id, victim_coins - slap_amount, victim.name)

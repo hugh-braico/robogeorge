@@ -197,7 +197,11 @@ class YomoCoins:
 
 
     def is_richest_yomofan(self, user_id: int): 
-        return user_id == max(self.coins_dict, key=lambda k: self.coins_dict[k]["coins"])
+        # If everyone has the exact same amount of coins we don't want to deadlock centrelink
+        return (
+            user_id == max(self.coins_dict, key=lambda k: self.coins_dict[k]["coins"])
+            and user_id != min(self.coins_dict, key=lambda k: self.coins_dict[k]["coins"])
+        )
 
 
     def get_winrate(self, user_id: int): 
