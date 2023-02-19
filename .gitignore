@@ -1,5 +1,5 @@
 sshkeys.sh
-yomocoin_backups/
+yomocoin_backups*/
 yomocoin_logs/
 
 # Byte-compiled / optimized / DLL files

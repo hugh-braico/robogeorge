@@ -659,9 +659,8 @@ async def lock_bets(ctx, timer: int=0):
 
         betting.lock()
         log.info(f"!lock: user {ctx.author.name} locked the bet")
-        yc.save_coins("yomocoins.csv")
-        yc.backup_coins()
         await ctx.send(f"🔒 Betting is now locked. No more bets can be made until the round is cancelled or reported.")
+        yc.save_coins_if_necessary("yomocoins.csv")
 
 
 @bot.command(name='autolock', help="Alias for !lock 180")
@@ -763,12 +762,10 @@ async def winner(ctx, team: str):
 
         winners_pot = sum([amount for (u_, t_, amount, e_) in winners_list])
         losers_pot = sum([amount for (u_, t_, amount, e_) in losers_list])
-        total_pot = int((winners_pot + losers_pot)*1.1)
+        total_pot = int((winners_pot + losers_pot)*pot_bonus())
 
         log.info(f"!winner: user {ctx.author.name} reported the winner as {winning_team}")
         log.info(f"!winner: winners_pot {winners_pot}, losers_pot {losers_pot}, total_pot {total_pot}")
-
-        yc.backup_coins()
 
         # pay out winnings and record wins for stats purposes
         win_amounts = {}
@@ -975,7 +972,8 @@ async def listbets(ctx):
 
         # Calculate pot sizes
         pot_list = [sum([amount for (u_, t_, amount, e_) in bets_list]) for bets_list in bets_list_list]
-        total_pot = int(sum(pot_list)*1.1)
+
+        total_pot = int(sum(pot_list)*pot_bonus())
 
         # Display a nice padlock emoji if the betting is locked
         if betting.is_locked():
@@ -1037,7 +1035,7 @@ async def listbets(ctx, user: User=None):
 
             winners_pot = sum([amount for (u_, t_, amount, e_) in winners_list])
             losers_pot  = sum([amount for (u_, t_, amount, e_) in losers_list])
-            total_pot   = int((winners_pot + losers_pot)*1.1)
+            total_pot   = int((winners_pot + losers_pot)*pot_bonus())
 
             win_float = float(bet_amount * total_pot) / float(winners_pot)
             win_amount = min(10*bet_amount, int(win_float)) 
@@ -1053,7 +1051,6 @@ async def listbets(ctx, user: User=None):
             await ctx.send(f"<:sorisring:770642052782358530> **{betting_user.name}** stands to win {win_amount} YomoCoins!" + 
                 f"\nThat's a net gain of {profit} YomoCoins, or a multiplier of {multiplier:.2f}x!"
             )
-
 
 
 
@@ -1095,6 +1092,33 @@ async def rigbet(ctx):
         ]
         await ctx.send("✅ The round is now rigged. " + random.choice(rig_messages) + "\nMake sure not to use this command outside of the secret mod channel.")
 
+
+# Calculate pot bonus for current bets
+# The more even the bets are, the better the bonus (between 1% and 20%)
+def pot_bonus():
+    if betting.is_empty() or not betting.is_active():
+        return 1.0
+
+    # Team names
+    teamlist = betting.get_teamlist()
+
+    # List of bets for each team (ie. a list of lists)
+    bets_list_list = [betting.get_bets_list(t) for t in teamlist]
+
+    # Calculate pot sizes
+    pot_list = sorted([sum([amount for (u_, t_, amount, e_) in bets_list]) for bets_list in bets_list_list], reverse=True)
+
+    # Calculate evenness as a factor between 0 and 1 (1 being best)
+    # Pick the top two pots, and compare them in size.
+    biggest_pot = pot_list[0]
+    second_biggest_pot = pot_list[1]
+    evenness = float(second_biggest_pot / biggest_pot)
+
+    multiplier = 1.01 + (evenness * 0.19)
+    log.info(f"calculated pot_bonus = {multiplier:.2f}")
+    return multiplier
+
+
 ################################################################################
 #
 ### Dueling 
@@ -1128,7 +1152,6 @@ async def listduels(ctx, involving: User=None):
 @bot.command(name='duel', aliases=['challenge', 'startduel'], help="Challenge a user to a duel")
 @commands.guild_only()
 async def startduel(ctx, accepter: User, amount: int):
-    yc.backup_coins()
     challenger = ctx.author
     challenger_coins = yc.get_coins(challenger.id)
     accepter_coins = yc.get_coins(accepter.id)
@@ -1253,7 +1276,6 @@ async def duelall(ctx, accepter: User):
 @bot.command(name='accept', aliases=['acceptduel'], help="Accept a challenge to duel")
 @commands.guild_only()
 async def acceptduel(ctx, challenger: User=None):
-    yc.backup_coins()
     accepter = ctx.author
     accepter_coins = yc.get_coins(accepter.id) 
 
@@ -1335,7 +1357,7 @@ async def acceptduel(ctx, challenger: User=None):
             yc.record_duel_profit(challenger_id, -amount)
             yc.record_duel_profit(accepter.id,    amount)
         dueling.remove(challenger_id, accepter.id)
-        yc.backup_coins()
+        yc.save_coins_if_necessary("yomocoins.csv")
 
 
 # reject a duel
@@ -1343,7 +1365,6 @@ async def acceptduel(ctx, challenger: User=None):
 @bot.command(name='reject', aliases=['rejectduel'], help="Reject a challenge to duel")
 @commands.guild_only()
 async def rejectduel(ctx, challenger: User=None):
-    yc.backup_coins()
     rejecter = ctx.author
     rejecter_coins = yc.get_coins(rejecter.id)     
 
@@ -1384,7 +1405,7 @@ async def rejectduel(ctx, challenger: User=None):
     yc.set_coins(challenger_id, challenger_coins + amount, challenger_name)
     dueling.remove(challenger_id, rejecter.id)
     await ctx.send(f"⚔️ The challenge has been rejected. {amount} YomoCoins have been returned to {challenger_name}.");
-    yc.backup_coins()
+    yc.save_coins_if_necessary("yomocoins.csv")
 
 
 # revoke a duel (like reject, but for a duel *you* started)
@@ -1392,7 +1413,6 @@ async def rejectduel(ctx, challenger: User=None):
 @bot.command(name='revoke', aliases=['revokeduel'], help="Take back a challenge to duel")
 @commands.guild_only()
 async def revokeduel(ctx, accepter: User=None):
-    yc.backup_coins()
     challenger = ctx.author    
 
     # get a list of valid duels 
@@ -1431,7 +1451,7 @@ async def revokeduel(ctx, accepter: User=None):
     yc.set_coins(challenger.id, challenger_coins + amount, challenger.name)
     dueling.remove(challenger.id, accepter_id)
     await ctx.send(f"⚔️ The challenge has been revoked. {amount} YomoCoins have been returned to {challenger.name}.");
-    yc.backup_coins()
+    yc.save_coins_if_necessary("yomocoins.csv")
 
 
 # cancel a duel (mods only command)
@@ -1448,7 +1468,7 @@ async def cancelduel(ctx, challenger: User, accepter: User):
         yc.set_coins(challenger.id, challenger_coins + amount, challenger.name)
         dueling.remove(challenger.id, accepter.id) 
         await ctx.send(f"⚔️ The duel has been cancelled. {amount} YomoCoins have been returned to {challenger.name}.");
-        yc.backup_coins()
+        yc.save_coins_if_necessary("yomocoins.csv")
 
 ################################################################################
 #
