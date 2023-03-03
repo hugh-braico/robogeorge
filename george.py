@@ -273,10 +273,14 @@ async def list(ctx, options: str ="default"):
             await ctx.send(f"""❌ That command is only allowed in {bot.get_channel(SPAM_CHANNEL).mention} or in DMs.""")
     elif options == "winrate": 
         if ctx.channel.id != BETTING_CHANNEL:
-            await ctx.send('\n'.join([   
+            leaderboard = [   
                 f"""🪙 {placing}. **{get_username(user_id)}**: {winrate:.2f}%.""" 
                 for (placing, (user_id, winrate)) in enumerate(yc.sorted_winrate_list(), 1)
-            ]))
+            ]
+            if leaderboard:
+                await ctx.send('\n'.join(leaderboard))
+            else:
+                await ctx.send("❌ Nobody has a statistically significant amount of bets yet (at least 25).")
         else:  
             await ctx.send(f"""❌ That command is only allowed in {bot.get_channel(SPAM_CHANNEL).mention} or in DMs.""")
     elif options == "default":
@@ -756,13 +760,14 @@ async def winner(ctx, team: str):
 
         winners_list = betting.get_bets_list(winning_team)
         losers_list  = betting.get_bets_list(winning_team, invert=True)
+        pot_multiplier = pot_bonus()
 
         # cancel as early as possible to make race conditions less likely (still possible, ofc)
         betting.cancel()
 
         winners_pot = sum([amount for (u_, t_, amount, e_) in winners_list])
         losers_pot = sum([amount for (u_, t_, amount, e_) in losers_list])
-        total_pot = int((winners_pot + losers_pot)*pot_bonus())
+        total_pot = int((winners_pot + losers_pot)*pot_multiplier)
 
         log.info(f"!winner: user {ctx.author.name} reported the winner as {winning_team}")
         log.info(f"!winner: winners_pot {winners_pot}, losers_pot {losers_pot}, total_pot {total_pot}")
