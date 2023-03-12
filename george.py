@@ -1011,7 +1011,7 @@ async def listbets(ctx):
 
 
 # list current bets
-@bot.command(name='payout', help="See the potential payout of the bet as it stands")
+@bot.command(name='payout', aliases=['winnings', 'gainz'], help="See the potential payout of the bet as it stands")
 @commands.guild_only()
 async def listbets(ctx, user: User=None):
     if not betting.is_active(): 

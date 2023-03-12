@@ -219,7 +219,7 @@ class YomoCoins:
             (user_id, self.get_winrate(user_id)) 
             for user_id 
             in self.coins_dict.keys() 
-            if self.get_wins(user_id) >= 25
+            if (self.get_losses(user_id) + self.get_wins(user_id)) >= 25
         ]
         return sorted(winrate_list, key=lambda t: t[1], reverse=True) 
 
