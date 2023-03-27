@@ -18,6 +18,7 @@ from discord_components import DiscordComponents, Button
 import yomocoins
 import betting
 import dueling
+import mahjong
 
 # logging stuff
 import logging
@@ -49,6 +50,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 yc = yomocoins.YomoCoins()
 betting = betting.Betting()
 dueling = dueling.Dueling()
+mahjong = mahjong.Mahjong()
 
 
 ################################################################################
@@ -98,6 +100,8 @@ async def bang(ctx):
     if ctx.author.id == SEAJAY: 
         if betting.is_active(): 
             await ctx.send("❌ `!cancel` or `!winner` the current betting round before shutting down.")
+        elif mahjong.is_active(): 
+            await ctx.send("❌ `!mjcancel` or `!mjreport` the current mahjong round before shutting down.")
         else:
             # Cancel all duels first 
             for duel in dueling.get_duels():
@@ -411,6 +415,8 @@ async def centrelink(ctx, option: str=None):
         if betting.bet_exists(recipient_id):
             existing_bet = betting.get_bet(recipient_id)
             effective_coins += existing_bet["amount"]
+        if mahjong.buyin_exists(recipient_id):
+            effective_coins += mahjong.get_buyin()
         for duel in dueling.get_duels(challenger=recipient_id):
             effective_coins += duel[2]
 
@@ -955,7 +961,7 @@ async def betnanaall(ctx):
         await ctx.send(f"<:squint:749549668954013696> You don't have any YomoCoins to bet. Maybe try `!centrelink`?")
     elif betting.bet_exists(user_id):
         await ctx.send(f"❌ Can't do that if you've already bet.")
-    else:   
+    else:
         teamlist = betting.get_teamlist()
         team = str(random.randint(1, len(teamlist)))
         await ctx.send("<:vic:792318295709581333>")
@@ -1474,6 +1480,149 @@ async def cancelduel(ctx, challenger: User, accepter: User):
         dueling.remove(challenger.id, accepter.id) 
         await ctx.send(f"⚔️ The duel has been cancelled. {amount} YomoCoins have been returned to {challenger.name}.");
         yc.save_coins_if_necessary("yomocoins.csv")
+
+
+################################################################################
+#
+### Mahjong 
+### Mahjong is a weird variation on bets with a flat buyin, 4 players only, 
+### and scaled winnings depending on how many points everyone scored
+
+# start mahjong round
+@bot.command(name='mj', help="Start a new game of mahjong")
+@commands.guild_only()
+async def mj(ctx, buyin: int, p2: User, p3: User, p4: User):
+    if mahjong.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There already appears to be an active mahjong round.")
+    elif buyin <= 0: 
+        await ctx.send(f"<:squint:749549668954013696> The buyin cannot be zero or negative.")
+    else:
+        p1 = ctx.author
+        playerlist = [p1.id, p2.id, p3.id, p4.id]
+
+        passed_checks = True
+        for pid in playerlist:
+            player_coins = yc.get_coins(pid)
+            if player_coins is None:
+                await ctx.send(f"<:squint:749549668954013696> {get_username(pid)} doesn't appear to be in the YomoCoins system yet. Use `!optin`")
+                passed_checks = False
+            elif player_coins < buyin:
+                await ctx.send(f"<:squint:749549668954013696> {get_username(pid)} has only {player_coins} YomoCoins and can't afford to buy in.")
+                passed_checks = False
+        if not passed_checks:
+            return
+
+        log.info(f"!start: {p1.name} started mahjong with buyin {buyin}, players {[p1.name, p2.name, p3.name, p4.name]}")
+
+        for pid in playerlist:
+            yc.set_coins(pid, yc.get_coins(pid) - buyin, get_username(pid))
+            await ctx.send(f"💰 **{get_username(pid)}** buys in with {buyin} YomoCoins.")
+
+        mahjong.start(buyin, playerlist)
+
+        await ctx.send(f"🀄 Started a new round of mahjong!\n" +
+            f"This round is between **{p1.name}**, **{p2.name}**, **{p3.name}**, and **{p4.name}**.\n" +
+            f"Use !mjreport to report scores."
+        )
+
+        yc.save_coins_if_necessary("yomocoins.csv")
+
+
+# check current status of mahjong round
+@bot.command(name='mjcheck', help="Check current game of mahjong")
+@commands.guild_only()
+async def mjcheck(ctx):
+    if not mahjong.is_active(): 
+        await ctx.send(f"There doesn't appear to be an active mahjong round.")
+    else:
+        players = mahjong.get_players()
+        await ctx.send(f"🀄 This round is between **{get_username(players[0])}**, **{get_username(players[1])}**, **{get_username(players[2])}**, and **{get_username(players[3])}**.\n" +
+            f"Use !mjreport to report scores."
+        )
+
+
+# argument handling for mjreport
+class MjScore(commands.Converter):
+    async def convert(self, ctx, argument):
+        if re.fullmatch(r"-?\d+", argument):
+            return int(argument)
+        else: 
+            # Can optionally specify eg. 27.5k for 27500
+            result = re.fullmatch(r"(-?\d*\.?\d*)k", argument)
+            if result:
+                return int(float(result.group(1))*1000.0)
+            else:
+                raise Exception("Invalid parameter")
+
+
+# Report mahjong scores
+@bot.command(name='mjreport', help="Report mahjong scores")
+@commands.guild_only()
+async def mjreport(ctx, p1score: MjScore, p2score: MjScore, p3score: MjScore, p4score: MjScore):
+    if not mahjong.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There doesn't appear to be an active mahjong round.")
+    else:
+        scores_list = [p1score, p2score, p3score, p4score]
+        log.info(f"!start: {ctx.author.name} reported mahjong scores {scores_list}")
+        pool = mahjong.get_buyin() * 4
+        players = mahjong.get_players()
+        player_score_dict = dict(zip(players, scores_list))
+        player_ranking_desc = sorted(player_score_dict.items(), key=lambda i: i[1], reverse=True)
+
+        # find out if the last player's score will end up being in the negative
+        # if so, we want to invisibly increase all scores such that the lowest score is 0
+        score_offset = 0
+        lowest_final_score = min(scores_list) - 15000
+        if lowest_final_score < 0:
+            score_offset = -lowest_final_score
+        total_score = sum(scores_list) + score_offset*4
+
+        if total_score == 0:
+            await ctx.send(f"<:squint:749549668954013696> Everyone scored 0? I guess I will just refund buyins.")
+            await self.mjcancel(ctx)
+            return
+
+        # uma = placement bonus/penalty of 15k, 5k, -5k and -15k
+        uma = 15000
+
+        await ctx.send(f"🀄 The round of mahjong has finished!")
+
+        for pid, score in player_ranking_desc:
+            winnings = int(float(pool) * ((float(score)+score_offset+uma) / float(total_score)))
+            yc.set_coins(pid, yc.get_coins(pid) + int(winnings), get_username(pid))
+            if uma > 0:
+                uma_display = f"+{uma}"
+            else:
+                uma_display = f"{uma}"
+            await ctx.send(f"💰 **{get_username(pid)}** scored {score}{uma_display}=**{score+uma}** pts for {winnings} YomoCoins!")
+            uma -= 10000
+
+        mahjong.cancel()
+
+        yc.save_coins_if_necessary("yomocoins.csv")
+
+
+# Report mahjong scores
+@bot.command(name='mjcancel', help="Cancel a game of mahjong")
+@commands.guild_only()
+async def mjcancel(ctx):
+    if not mahjong.is_active(): 
+        await ctx.send(f"<:squint:749549668954013696> There doesn't appear to be an active mahjong round.")
+    else:
+        log.info(f"!start: {ctx.author.name} cancelled the game of mahjong")
+        buyin = mahjong.get_buyin()
+        players = mahjong.get_players()
+
+        await ctx.send(f"🀄 The round of mahjong has finished!")
+
+        for pid in players:
+            yc.set_coins(pid, yc.get_coins(pid) + buyin, get_username(pid))
+            await ctx.send(f"💰 Returned {buyin} YomoCoins to **{get_username(pid)}**.")
+
+        mahjong.cancel()
+
+        yc.save_coins_if_necessary("yomocoins.csv")
+
 
 ################################################################################
 #

@@ -115,7 +115,7 @@ class YomoCoins:
             self.coins_dict[user_id]["duel_profits"] = 0
             self.coins_dict[user_id]["steam_id"]     = ""
         log.info(f"""set_coins: {name}: {self.coins_dict[user_id]["coins"]} -> {coins}""")
-        self.coins_dict[user_id]["coins"] = coins
+        self.coins_dict[user_id]["coins"] = int(coins)
 
 
     # list of all user ids, sorted from richest to poorest

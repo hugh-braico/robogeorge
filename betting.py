@@ -134,7 +134,7 @@ class Betting:
 
     # get a user's existing bet
     def get_bet(self, user_id: int): 
-        if not self.is_active() or user_id not in self.bets:
+        if not self.bet_exists(user_id):
             return None
         else:
             return self.bets[user_id]
