@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 from discord import User
 from discord.ext import commands
-from discord_components import DiscordComponents, Button
+# from discord_components import DiscordComponents, Button
 
 import yomocoins
 import betting
@@ -41,9 +41,11 @@ STEAM_API_TOKEN = os.getenv('STEAM_API_TOKEN')
 SEAJAY          = int(os.getenv('SEAJAY'))
 BETTING_CHANNEL = int(os.getenv('BETTING_CHANNEL'))
 SPAM_CHANNEL    = int(os.getenv('SPAM_CHANNEL'))
+SGOCE_GUILD                = int(os.getenv('SGOCE_GUILD'))
+SGOCE_BOT_COMMANDS_CHANNEL = int(os.getenv('SGOCE_BOT_COMMANDS_CHANNEL'))
 
 # let the bot cache member information and such
-intents = discord.Intents.default()
+intents = discord.Intents.all()
 intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
@@ -54,11 +56,35 @@ dueling = dueling.Dueling()
 mahjong = mahjong.Mahjong()
 randomSelecting = randomSelecting.RandomSelecting()
 
-# select random Skullgirls team
-@bot.command(name='death', help="Select a random Skullgirls team")
-@commands.guild_only()
+# select completely random Skullgirls team
+@bot.command(name='death', aliases=['gamba', 'gamble', 'gamblor', 'gambling'], help="Select a random Skullgirls trio")
 async def death(ctx):
     await ctx.send(randomSelecting.random_team())
+
+# select completely random Skullgirls team with duplicate characters
+@bot.command(name='d3ath', aliases=['death3', 'gamba3', 'gamble3', 'gambl3', 'gamblor3', 'gambling3'],  help="Select a random Skullgirls trio with all duplicate characters")
+async def death3(ctx):
+    await ctx.send(randomSelecting.random_team3())
+
+# select random Skullgirls team with not-terrible assists
+@bot.command(name='purgatory', help="Select a random Skullgirls trio with slightly better assists")
+async def purgatory(ctx):
+    await ctx.send(randomSelecting.random_tasteful_team())
+
+# select random Skullgirls team with not-terrible assists and duplicate characters
+@bot.command(name='purgatory3', help="Select a random Skullgirls trio with slightly better assists and all duplicate characters")
+async def purgatory3(ctx):
+    await ctx.send(randomSelecting.random_tasteful_team3())
+
+# select random Skullgirls team with good assists
+@bot.command(name='heaven', help="Select a random Skullgirls trio with good assists")
+async def purgatory(ctx):
+    await ctx.send(randomSelecting.random_meta_team())
+
+# select random Skullgirls team with duplicate characters
+@bot.command(name='heaven3', aliases=['h3aven', 'h3av3n', 'heav3n', 'h3aven3', 'h3av3n3', 'heav3n3'], help="Select a random Skullgirls trio with good assists and all duplicate characters")
+async def purgatory3(ctx):
+    await ctx.send(randomSelecting.random_meta_team3())
 
 ################################################################################
 #
@@ -67,7 +93,7 @@ async def death(ctx):
 # print server connection info
 @bot.event
 async def on_ready():
-    DiscordComponents(bot)
+    # DiscordComponents(bot)
     log.info(f'{bot.user} is connected to the following server(s):')
     for guild in bot.guilds:
         log.info(f'    {guild.name} (id: {guild.id})')
@@ -114,7 +140,7 @@ async def bang(ctx):
             for duel in dueling.get_duels():
                 await cancelduel(ctx, bot.get_user(duel[0]), bot.get_user(duel[1]))
 
-            if ctx.guild.id == 379741506057011211:
+            if ctx.guild.id == SGOCE_GUILD:
                 await ctx.send("<:sadcat:712998237975478282> Shutting down...")
             else:
                 await ctx.send("<:sadcat:712998237975478282> Saving YomoCoins database and shutting down...")
@@ -132,7 +158,7 @@ async def on_command_error(ctx, error):
     # Prevents any commands with local handlers being handled here
     if hasattr(ctx.command, 'on_error'):
         return
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     error = getattr(error, 'original', error)
     if isinstance(error, commands.DisabledCommand):
@@ -182,7 +208,7 @@ def get_username(user_id: int):
 @bot.command(name='optin', aliases=['opt_in'], help='Opt into YomoCoins, get 310 starting coins')
 @commands.guild_only()
 async def optin(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if yc.get_coins(ctx.author.id) is None:
         yc.set_coins(ctx.author.id, 310, ctx.author.name)
@@ -190,7 +216,7 @@ async def optin(ctx):
         await ctx.send(f"🪙 Welcome to YomoCoins! You have been given 310 starting YomoCoins.")
     else: 
         await ctx.send(f"<:squint:749549668954013696> You have already opted in.")
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # set someone's yomocoins
@@ -198,19 +224,19 @@ async def optin(ctx):
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def set(ctx, user: User, coins: int):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     log.info(f"!set: admin {ctx.author.name} setting {user.name}'s coins to {coins}")
     yc.set_coins(user.id, coins, user.name)
     await ctx.send(f"🪙 {user.name}'s YomoCoins set to {coins}.")
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # give someone yomocoins
 @bot.command(name='give', help="Give some of your coins to another user")
 @commands.guild_only()
 async def give(ctx, recipient: User, coins: int):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     giver = ctx.author
     giver_coins = yc.get_coins(giver.id)
@@ -239,7 +265,7 @@ async def give(ctx, recipient: User, coins: int):
             await ctx.send(f"🪙 You have given {recipient.name} a single YomoCoin. They now have {recipient_coins + coins}.")
         else:
             await ctx.send(f"🪙 You have given {recipient.name} {coins} YomoCoins. They now have {recipient_coins + coins}.")
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # award someone yomocoins (admin only)
@@ -247,7 +273,7 @@ async def give(ctx, recipient: User, coins: int):
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def award(ctx, recipient: User, coins: int):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     recipient_coins = yc.get_coins(recipient.id)
     if recipient_coins is None: 
@@ -270,7 +296,7 @@ async def award(ctx, recipient: User, coins: int):
             await ctx.send(f"🪙 {recipient.name} had {-coins} of their YomoCoins revoked. They now have {recipient_coins + coins}.")
         else: 
             await ctx.send(f"🪙 {recipient.name} can have {coins} YomoCoins, as a treat. They now have {recipient_coins + coins}.")
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # save yomocoins
@@ -278,7 +304,7 @@ async def award(ctx, recipient: User, coins: int):
 @commands.guild_only()
 @commands.has_permissions(administrator=True)
 async def save(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     log.info("!save: saving coins")
     yc.save_coins("yomocoins.csv")
@@ -289,7 +315,7 @@ async def save(ctx):
 # list everyone's yomocoins
 @bot.command(name='list', aliases=['listcoins', 'list_coins', 'listcoin', 'list_coin'], help="List how many coins everyone has")
 async def list(ctx, options: str ="default"):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if options == "all":
         if ctx.channel.id != BETTING_CHANNEL:
@@ -350,7 +376,7 @@ async def list(ctx, options: str ="default"):
 # print one person's yomocoins
 @bot.command(name='coins', aliases=['coin', 'balance', 'mycoins', 'my_coins', 'checkcoins', 'check_coins'], help="List how many coins you have, or a specific user")
 async def single_coins(ctx, user: User = None):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if user is None: 
         user = ctx.author
@@ -368,7 +394,7 @@ async def single_coins(ctx, user: User = None):
 # print all yomocoins in circulation
 @bot.command(name='totalcoins', aliases=['allcoins', 'economy'], help="Calculate total number of coins in circulation")
 async def totalcoins(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     total_coins = sum([yc.get_coins(uid) for uid in yc.sorted_coins_list()])
     await ctx.send(f"""🪙 Total number of coins in circulation: **{total_coins}** YomoCoins.""")
@@ -377,7 +403,7 @@ async def totalcoins(ctx):
 # print one person's betting stats
 @bot.command(name='stats', help="Betting statistics for yourself (or a specific user)")
 async def betting_stats(ctx, user: User = None):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if user is None: 
         user = ctx.author
@@ -423,10 +449,10 @@ async def betting_stats(ctx, user: User = None):
     
 
 # claim daily coins 
-@bot.command(name='centrelink', aliases=["c", "cenno", "cenny", "gimme", "newstart", "jobkeeper", "jobseeker", "dole", "youthallowance"], help="Claim a daily 25 coins")
+@bot.command(name='centrelink', aliases=["c", "claim", "cenno", "cenny", "gimme", "newstart", "jobkeeper", "jobseeker", "dole", "youthallowance"], help="Claim a daily 25 coins")
 @commands.guild_only()
 async def centrelink(ctx, option: str=None):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     recipient_id = ctx.author.id
     recipient_coins = yc.get_coins(recipient_id)
@@ -473,7 +499,7 @@ async def centrelink(ctx, option: str=None):
         if option == "--force":
             await ctx.send(f"⚠️ Bypassing Centrelink daily quota. This should only be used for testing purposes!")
         await ctx.send(f"🪙 Claimed {daily_amount} daily YomoCoins. You now have {recipient_coins + daily_amount}.")
-        yc.save_coins_if_necessary("yomocoins.csv")
+        yc.save_coins("yomocoins.csv")
 
 
 # spend a large amount of coins to remove a small amount of someone else's 
@@ -481,7 +507,7 @@ async def centrelink(ctx, option: str=None):
 @bot.command(name='slap', help="Spend 200 coins to take away ~25 of someone's coins")
 @commands.guild_only()
 async def slap(ctx, victim: User):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     slapper = ctx.author
     slapper_coins = yc.get_coins(slapper.id)
@@ -538,7 +564,7 @@ async def slap(ctx, victim: User):
                 f"🪙 They managed to hold onto **their last YomoCoin** as they reeled from the impact.\n" + 
                 f"<:hmmge:798436267435884584> 🪙"
             )
-        yc.save_coins_if_necessary("yomocoins.csv")
+        yc.save_coins("yomocoins.csv")
 
 
 ################################################################################
@@ -549,7 +575,7 @@ async def slap(ctx, victim: User):
 @bot.command(name='start', aliases=['startbets'], help="Start a new betting round")
 @commands.guild_only()
 async def startbets(ctx, *teams):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
 
     # unpack teams tuple into a list
@@ -616,14 +642,14 @@ async def startbets(ctx, *teams):
             f"To cancel the round, type `!cancel`."
         )
 
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # cancel betting round
 @bot.command(name='cancel', help="Cancel the current betting round")
 @commands.guild_only()
 async def cancel(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -654,14 +680,14 @@ async def cancel(ctx):
     # Case where someone tries to approve their own cancel
     elif betting.get_canceller() == author_id:
         await ctx.send(f"<:squint:749549668954013696> You can't confirm your own cancellation proposal.")
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # lock betting round
 @bot.command(name='lock', help="Stop any further bets from being made in this round. Can be on a timer")
 @commands.guild_only()
 async def lock_bets(ctx, timer: int=0):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -711,13 +737,13 @@ async def lock_bets(ctx, timer: int=0):
         betting.lock()
         log.info(f"!lock: user {ctx.author.name} locked the bet")
         await ctx.send(f"🔒 Betting is now locked. No more bets can be made until the round is cancelled or reported.")
-        yc.save_coins_if_necessary("yomocoins.csv")
+        yc.save_coins("yomocoins.csv")
 
 
 @bot.command(name='autolock', help="Alias for !lock 180")
 @commands.guild_only()
 async def autolock(ctx, timer: int=180):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     await lock_bets(ctx, timer)
 
@@ -726,7 +752,7 @@ async def autolock(ctx, timer: int=180):
 @bot.command(name='stopautolock', aliases=['noautolock', 'cancelautolock'], help="Cancel autolock timer")
 @commands.guild_only()
 async def stopautolock(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -743,7 +769,7 @@ async def stopautolock(ctx):
 @bot.command(name='firstblood', aliases=['fb'], help="Report first blood")
 @commands.guild_only()
 async def bet(ctx, team: str):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -778,7 +804,7 @@ async def bet(ctx, team: str):
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def unlock_bets(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -794,7 +820,7 @@ async def unlock_bets(ctx):
 @bot.command(name='winner', help="Report the winner of a round")
 @commands.guild_only()
 async def winner(ctx, team: str):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -869,7 +895,7 @@ async def winner(ctx, team: str):
 @bot.command(name='bet', help="Place a bet")
 @commands.guild_only()
 async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -951,7 +977,7 @@ async def bet(ctx, team: str, amount: int, emote: str="moneybag"):
 @bot.command(name='betall', aliases=["allin"], help="Same as !bet but bets all of your coins")
 @commands.guild_only()
 async def betall(ctx, team: str):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     user_id = ctx.author.id
     amount = yc.get_coins(user_id)
@@ -978,7 +1004,7 @@ async def betall(ctx, team: str):
 @bot.command(name='betnana', help="!bets a random amount for a random team")
 @commands.guild_only()
 async def betnana(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     user_id = ctx.author.id
     user_coins = yc.get_coins(user_id)
@@ -1005,7 +1031,7 @@ async def betnana(ctx):
 @bot.command(name='betnanaall', aliases=["betallnana", "betnanall"], help="!bets all of your coins on a random team")
 @commands.guild_only()
 async def betnanaall(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     user_id = ctx.author.id
     user_coins = yc.get_coins(user_id)
@@ -1031,7 +1057,7 @@ async def betnanaall(ctx):
 @bot.command(name='bets', aliases=['listbets', 'list_bets', 'allbets', 'all_bets', 'betlist', 'bet_list', 'bets_list', 'betslist'], help="List all current bets")
 @commands.guild_only()
 async def listbets(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -1081,7 +1107,7 @@ async def listbets(ctx):
 @bot.command(name='payout', aliases=['winnings', 'gainz'], help="See the potential payout of the bet as it stands")
 @commands.guild_only()
 async def listbets(ctx, user: User=None):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -1132,7 +1158,7 @@ async def listbets(ctx, user: User=None):
 @bot.command(name='draft', aliases=['lineup'], help="Post or request an image of the draft/lineup")
 @commands.guild_only()
 async def draft(ctx, link: str=None):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening. Use `!start team1 team2` to start one.")
@@ -1152,7 +1178,7 @@ async def draft(ctx, link: str=None):
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def rigbet(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not betting.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There is no active betting round happening to rig.")
@@ -1206,7 +1232,7 @@ def pot_bonus():
 @bot.command(name='duels', aliases=['allduels', 'listduels'], help="List all currently open duels")
 @commands.guild_only()
 async def listduels(ctx, involving: User=None):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if involving:
         duels = dueling.get_duels_involving(involving.id)
@@ -1232,7 +1258,7 @@ async def listduels(ctx, involving: User=None):
 @bot.command(name='duel', aliases=['challenge', 'startduel'], help="Challenge a user to a duel")
 @commands.guild_only()
 async def startduel(ctx, accepter: User, amount: int):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     challenger = ctx.author
     challenger_coins = yc.get_coins(challenger.id)
@@ -1284,14 +1310,14 @@ async def startduel(ctx, accepter: User, amount: int):
             f"⚔️ {challenger.name} has challenged {accepter.name} to a duel for **{amount} YomoCoins!** Will they accept?\n" +
             f"Type `!accept` to accept the duel, or `!reject` to decline. Mods can use `!cancelduel`."
         )
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # random duel
 @bot.command(name='duelnana', help="Duel someone for a random amount")
 @commands.guild_only()
 async def duelnana(ctx, accepter: User):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     challenger = ctx.author
     challenger_coins = yc.get_coins(challenger.id)
@@ -1319,14 +1345,14 @@ async def duelnana(ctx, accepter: User):
         amount = random.randint(1, min(challenger_coins, accepter_coins))
         await ctx.send("<:vic:792318295709581333>")
         await startduel(ctx, accepter, amount)
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # duel version of betall
 @bot.command(name='duelall', help="Duel someone for the maximum amount")
 @commands.guild_only()
 async def duelall(ctx, accepter: User):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     challenger = ctx.author
     challenger_coins = yc.get_coins(challenger.id)
@@ -1354,7 +1380,7 @@ async def duelall(ctx, accepter: User):
         amount = min(challenger_coins, accepter_coins)
         await ctx.send(f"<a:BoxingChimp:795509491637682186>")
         await startduel(ctx, accepter, amount)
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # accept a duel
@@ -1362,7 +1388,7 @@ async def duelall(ctx, accepter: User):
 @bot.command(name='accept', aliases=['acceptduel'], help="Accept a challenge to duel")
 @commands.guild_only()
 async def acceptduel(ctx, challenger: User=None):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     accepter = ctx.author
     accepter_coins = yc.get_coins(accepter.id) 
@@ -1445,7 +1471,7 @@ async def acceptduel(ctx, challenger: User=None):
             yc.record_duel_profit(challenger_id, -amount)
             yc.record_duel_profit(accepter.id,    amount)
         dueling.remove(challenger_id, accepter.id)
-        yc.save_coins_if_necessary("yomocoins.csv")
+        yc.save_coins("yomocoins.csv")
 
 
 # reject a duel
@@ -1453,7 +1479,7 @@ async def acceptduel(ctx, challenger: User=None):
 @bot.command(name='reject', aliases=['rejectduel'], help="Reject a challenge to duel")
 @commands.guild_only()
 async def rejectduel(ctx, challenger: User=None):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     rejecter = ctx.author
     rejecter_coins = yc.get_coins(rejecter.id)     
@@ -1495,7 +1521,7 @@ async def rejectduel(ctx, challenger: User=None):
     yc.set_coins(challenger_id, challenger_coins + amount, challenger_name)
     dueling.remove(challenger_id, rejecter.id)
     await ctx.send(f"⚔️ The challenge has been rejected. {amount} YomoCoins have been returned to {challenger_name}.");
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # revoke a duel (like reject, but for a duel *you* started)
@@ -1503,7 +1529,7 @@ async def rejectduel(ctx, challenger: User=None):
 @bot.command(name='revoke', aliases=['revokeduel'], help="Take back a challenge to duel")
 @commands.guild_only()
 async def revokeduel(ctx, accepter: User=None):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     challenger = ctx.author    
 
@@ -1543,7 +1569,7 @@ async def revokeduel(ctx, accepter: User=None):
     yc.set_coins(challenger.id, challenger_coins + amount, challenger.name)
     dueling.remove(challenger.id, accepter_id)
     await ctx.send(f"⚔️ The challenge has been revoked. {amount} YomoCoins have been returned to {challenger.name}.");
-    yc.save_coins_if_necessary("yomocoins.csv")
+    yc.save_coins("yomocoins.csv")
 
 
 # cancel a duel (mods only command)
@@ -1551,7 +1577,7 @@ async def revokeduel(ctx, accepter: User=None):
 @commands.has_permissions(administrator=True)
 @commands.guild_only()
 async def cancelduel(ctx, challenger: User, accepter: User):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not dueling.duel_exists(challenger.id, accepter.id):
         await ctx.send(f"<:squint:749549668954013696> That duel doesn't currently exist.")
@@ -1562,7 +1588,7 @@ async def cancelduel(ctx, challenger: User, accepter: User):
         yc.set_coins(challenger.id, challenger_coins + amount, challenger.name)
         dueling.remove(challenger.id, accepter.id) 
         await ctx.send(f"⚔️ The duel has been cancelled. {amount} YomoCoins have been returned to {challenger.name}.");
-        yc.save_coins_if_necessary("yomocoins.csv")
+        yc.save_coins("yomocoins.csv")
 
 
 ################################################################################
@@ -1575,7 +1601,7 @@ async def cancelduel(ctx, challenger: User, accepter: User):
 @bot.command(name='mj', help="Start a new game of mahjong")
 @commands.guild_only()
 async def mj(ctx, buyin: int, p2: User, p3: User, p4: User):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if mahjong.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There already appears to be an active mahjong round.")
@@ -1610,14 +1636,14 @@ async def mj(ctx, buyin: int, p2: User, p3: User, p4: User):
             f"Use !mjreport to report scores."
         )
 
-        yc.save_coins_if_necessary("yomocoins.csv")
+        yc.save_coins("yomocoins.csv")
 
 
 # check current status of mahjong round
 @bot.command(name='mjcheck', help="Check current game of mahjong")
 @commands.guild_only()
 async def mjcheck(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not mahjong.is_active(): 
         await ctx.send(f"There doesn't appear to be an active mahjong round.")
@@ -1646,7 +1672,7 @@ class MjScore(commands.Converter):
 @bot.command(name='mjreport', help="Report mahjong scores")
 @commands.guild_only()
 async def mjreport(ctx, p1score: MjScore, p2score: MjScore, p3score: MjScore, p4score: MjScore):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not mahjong.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There doesn't appear to be an active mahjong round.")
@@ -1688,14 +1714,14 @@ async def mjreport(ctx, p1score: MjScore, p2score: MjScore, p3score: MjScore, p4
 
         mahjong.cancel()
 
-        yc.save_coins_if_necessary("yomocoins.csv")
+        yc.save_coins("yomocoins.csv")
 
 
 # Report mahjong scores
 @bot.command(name='mjcancel', help="Cancel a game of mahjong")
 @commands.guild_only()
 async def mjcancel(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     if not mahjong.is_active(): 
         await ctx.send(f"<:squint:749549668954013696> There doesn't appear to be an active mahjong round.")
@@ -1712,14 +1738,14 @@ async def mjcancel(ctx):
 
         mahjong.cancel()
 
-        yc.save_coins_if_necessary("yomocoins.csv")
+        yc.save_coins("yomocoins.csv")
 
 
 # Report mahjong scores
 @bot.command(name='mjhelp', help="Get help on how to do mahjong stuff")
 @commands.guild_only()
 async def mjhelp(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     await ctx.send(
         f"`!mj buyinAmount @player2 @player3 @player4` - start a game of Mahjong (assumes you are player 1)\n" +
@@ -1748,7 +1774,7 @@ async def async_get_json(url):
 @bot.command(name='steamid', aliases=['steam_id', 'steam'], help="Register your Steam ID for lobby link posting")
 @commands.guild_only()
 async def register_steam_id(ctx, arg):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     help_message = "`!steamid` usage: enter your full Steam profile URL or just the " + \
         "last part, e.g. `!steamid http://steamcommunity.com/id/robinwalker/` " + \
@@ -1793,7 +1819,7 @@ async def register_steam_id(ctx, arg):
 @bot.command(name='lobby', help="Post a steam lobby link")
 @commands.guild_only()
 async def post_lobby_link(ctx):
-    if ctx.guild.id == 379741506057011211:
+    if ctx.guild.id == SGOCE_GUILD:
         return
     steam_id = yc.get_steam_id(ctx.author.id)
     if steam_id:
