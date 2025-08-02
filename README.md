@@ -18,7 +18,7 @@ Not intended for outside use. This is just here for my own use.
 - Update `User` and `WorkingDirectory` in `robogeorge.service`
 
 ```shell
-cp robogeorge.service /etc/systemd/system
+sudo cp robogeorge.service /etc/systemd/system
 sudo systemctl daemon-reload
 sudo systemctl enable robogeorge.service
 sudo systemctl start robogeorge.service
