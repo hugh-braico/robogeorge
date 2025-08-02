@@ -1,0 +1,15 @@
+[Unit]
+Description=RoboGeorge Discord Bot
+After=network.target
+
+[Service]
+Type=forking
+User=habr
+WorkingDirectory=/home/habr/robogeorge
+ExecStart=/usr/bin/tmux new-session -d -s robogeorge 'bash start.sh'
+ExecStop=/usr/bin/tmux kill-session -t robogeorge
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
