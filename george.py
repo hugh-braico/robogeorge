@@ -470,14 +470,13 @@ async def centrelink(ctx, option: str=None):
     else:
         # Use open bets and duels to calculate a user's "real" coins for the purposes of cenno 
         recipient_coins = yc.get_coins(recipient_id)
-        effective_coins = recipient_coins
-        if betting.bet_exists(recipient_id):
-            existing_bet = betting.get_bet(recipient_id)
-            effective_coins += existing_bet["amount"]
-        if mahjong.buyin_exists(recipient_id):
-            effective_coins += mahjong.get_buyin()
-        for duel in dueling.get_duels(challenger=recipient_id):
-            effective_coins += duel[2]
+        effective_coins += get_effective_coins(recipient_id)
+
+        # Protect against "stealth richest YomoFan"
+        highest_effective_coins = max([get_effective_coins(u) for u in yc.sorted_coins_list()])
+        if effective_coins >= highest_effective_coins:
+            await ctx.send(f"❌ You are the richest YomoFan, so your Centrelink payments have been cancelled.")
+            return
 
         # Calculate cenno payout depending on user's effective coins
         if effective_coins < 87: 
@@ -500,6 +499,19 @@ async def centrelink(ctx, option: str=None):
             await ctx.send(f"⚠️ Bypassing Centrelink daily quota. This should only be used for testing purposes!")
         await ctx.send(f"🪙 Claimed {daily_amount} daily YomoCoins. You now have {recipient_coins + daily_amount}.")
         yc.save_coins("yomocoins.csv")
+
+
+def get_effective_coins(user_id) -> int:
+    # Use open bets and duels to calculate a user's "real" coins for the purposes of cenno
+    effective_coins = yc.get_coins(user_id)
+    if betting.bet_exists(user_id):
+        existing_bet = betting.get_bet(user_id)
+        effective_coins += existing_bet["amount"]
+    if mahjong.buyin_exists(user_id):
+        effective_coins += mahjong.get_buyin()
+    for duel in dueling.get_duels(challenger=user_id):
+        effective_coins += duel[2]
+    return effective_coins
 
 
 # spend a large amount of coins to remove a small amount of someone else's 
